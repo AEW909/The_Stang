@@ -80,10 +80,27 @@ export interface InteractableDef {
   id: string;
   name: string;
   examineText: string;
+  /** Shown instead of examineText while this interactable is open. Defaults to examineText. */
+  openExamineText?: string;
+  /** Fragment used in the room's auto-generated "You can also see" list, e.g. "A FIRE EXTINGUISHER on the wall." Defaults to name if omitted. */
+  shortDescription?: string;
+  /** Shown instead of shortDescription while this interactable is open. Defaults to shortDescription. */
+  openShortDescription?: string;
+  /** Excludes this interactable from the auto-generated list — for NPCs and plot-critical
+   * objects (e.g. Camille's note) that deserve full authored prose instead of a bullet. */
+  excludeFromList?: boolean;
+  /** If set, this interactable is only visible/matchable while the named interactable
+   * (by id, same room) is open — e.g. a key that lives inside a drawer. */
+  containedIn?: string;
   takeable?: boolean;
   itemId?: string;
   /** For plot objects (e.g. a note) where examining it triggers story effects. */
   onExamineEffects?: EngineEffect[];
+  openable?: boolean;
+  /** Starts open; defaults to false (closed) when openable. */
+  startsOpen?: boolean;
+  openText?: string;
+  closeText?: string;
 }
 
 export interface ExitDef {

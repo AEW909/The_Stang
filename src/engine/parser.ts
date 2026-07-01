@@ -9,6 +9,8 @@ export type ParsedCommand =
   | { verb: "take"; target: string }
   | { verb: "drop"; target: string }
   | { verb: "use"; target: string; secondTarget?: string }
+  | { verb: "open"; target: string }
+  | { verb: "close"; target: string }
   | { verb: "talk"; target?: string }
   | { verb: "health" }
   | { verb: "map" }
@@ -35,6 +37,9 @@ const VERB_ALIASES: Record<string, string> = {
   get: "take",
   drop: "drop",
   use: "use",
+  open: "open",
+  close: "close",
+  shut: "close",
   talk: "talk",
   health: "health",
   stats: "health",
@@ -78,6 +83,10 @@ export function parseCommand(raw: string): ParsedCommand {
       const onSplit = rest.split(/\s+on\s+/);
       return { verb: "use", target: onSplit[0], secondTarget: onSplit[1] };
     }
+    case "open":
+      return rest ? { verb: "open", target: rest } : { verb: "unknown", raw: trimmed };
+    case "close":
+      return rest ? { verb: "close", target: rest } : { verb: "unknown", raw: trimmed };
     case "talk":
       return { verb: "talk", target: rest || undefined };
     case "health":

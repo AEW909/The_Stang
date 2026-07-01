@@ -6,7 +6,7 @@ import { episode1 } from "./data/episodes/episode1";
 import { createInitialState } from "./engine/state";
 import type { GameState, PlayerProfile } from "./engine/state";
 import { getSuggestions, processCommand } from "./engine/commands";
-import { loadGame, saveGame } from "./engine/save";
+import { clearSave, loadGame, saveGame } from "./engine/save";
 
 const episode = episode1;
 
@@ -22,6 +22,17 @@ export default function App() {
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
+    // Visit with ?reset in the URL to wipe the save (e.g. after testing, before
+    // handing the game to its actual player). Not shown anywhere in the UI.
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("reset")) {
+      clearSave();
+      url.searchParams.delete("reset");
+      window.history.replaceState(null, "", url.toString());
+      setLoaded(true);
+      return;
+    }
+
     const saved = loadGame();
     if (saved) {
       setState(saved);

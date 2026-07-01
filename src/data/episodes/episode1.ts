@@ -2,6 +2,13 @@
 // stats) but never redefines them. Adding Episode 2 should mean writing a
 // new file, not editing this one or the engine.
 //
+// Room descriptions are deliberately lean: they set atmosphere and mention
+// exits/NPCs/plot objects, but never name ordinary props directly. Every
+// prop gets a `shortDescription`, and the engine appends a "You can also
+// see" line built from whichever interactables are currently revealed and
+// not yet taken (see describeRoom in src/engine/commands.ts). This keeps
+// room text and room data from drifting apart as more episodes are added.
+//
 // DRAFT/PLACEHOLDER CONTENT: room descriptions, comedic asides, and
 // especially Camille's note (see the `hallway` room and `endingText` below)
 // are reasonable creative choices made to fill the brief, not locked canon.
@@ -77,24 +84,33 @@ export const episode1: EpisodeDef = {
           name: "Classroom",
           locationId: "school",
           description:
-            "You're lying on the classroom floor, cheek stuck to the carpet tiles. Your head throbs. The clock on the wall says 8:47, which feels wrong in a way you can't place yet. Sunlight comes through the blinds in stripes. The room is empty — no teacher, no class. There's a TEACHER'S DESK against the wall, a WINDOW on the far side, and a HAMSTER CAGE on the side table. Someone's stuck a POSTER to the DOOR, slightly askew. The door itself is shut.",
+            "You're lying on the classroom floor, cheek stuck to the carpet tiles. Your head throbs. The clock on the wall says 8:47, which feels wrong in a way you can't place yet. Sunlight comes through the blinds in stripes. The room is empty — no teacher, no class. The DOOR is shut.",
           interactables: [
             {
               id: "desk",
               name: "TEACHER'S DESK",
               examineText:
-                "Mrs Reeves' desk. Suspiciously tidy, like always — except the drawer, which is open just a crack. Worth a closer look.",
+                "Mrs Reeves' desk. Suspiciously tidy, like always — except the drawer, which doesn't look properly shut. Worth a closer look.",
+              shortDescription: "A TEACHER'S DESK sits against the wall.",
             },
             {
               id: "drawer",
               name: "DESK DRAWER",
-              examineText:
+              examineText: "The desk's drawer. It's shut.",
+              openExamineText:
                 "Inside, half-buried under a stack of spelling tests, is a small brass key.",
+              shortDescription: "Its DESK DRAWER doesn't look properly shut.",
+              openShortDescription: "The DESK DRAWER hangs open, something glinting inside.",
+              openable: true,
+              openText: "You tug the drawer open. Something glints inside — a key.",
+              closeText: "You push the drawer shut.",
             },
             {
               id: "key",
               name: "BRASS KEY",
-              examineText: "A small brass key, sitting in the open drawer.",
+              examineText: "A small brass key.",
+              shortDescription: "A small BRASS KEY sits in the open drawer.",
+              containedIn: "drawer",
               takeable: true,
               itemId: "spare_key",
             },
@@ -102,18 +118,21 @@ export const episode1: EpisodeDef = {
               id: "window",
               name: "WINDOW",
               examineText: "Painted shut sometime during a previous decade, probably. Not opening today.",
+              shortDescription: "A WINDOW looks out over the empty playground.",
             },
             {
               id: "poster",
               name: "POSTER",
               examineText:
                 "'Keep Calm and Carry On... Learning.' Someone's pencilled a moustache on the little crown. Bold.",
+              shortDescription: "A POSTER hangs slightly askew by the door.",
             },
             {
               id: "hamster_cage",
               name: "HAMSTER CAGE",
               examineText:
                 "Empty. The tag reads 'MR NIBBLES.' There is no sign of Mr Nibbles. You choose not to think about that too hard.",
+              shortDescription: "An empty HAMSTER CAGE sits on the side table.",
             },
           ],
           exits: [
@@ -132,30 +151,41 @@ export const episode1: EpisodeDef = {
           name: "School Corridor",
           locationId: "school",
           description:
-            "The corridor outside is empty and colder than it should be. Fluorescent lights buzz along the ceiling — one of them dead. A NOTICE BOARD is pinned with flyers. Rows of LOCKERS line the wall. Someone's left a LOST PROPERTY BOX open on a bench. A FIRE EXTINGUISHER sits behind a cracked glass panel. Everything is exactly where it should be. That's somehow worse.",
+            "The corridor outside is empty and colder than it should be. Fluorescent lights buzz along the ceiling — one of them dead. Everything is exactly where it should be. That's somehow worse.",
           interactables: [
             {
               id: "noticeboard",
               name: "NOTICE BOARD",
               examineText:
                 "A flyer for the Y6 bake sale ('NO NUTS PLEASE — ASK MR DIGNAN WHY'). Under it, someone's pinned a handwritten note: 'LOST: one (1) sense of normalcy. REWARD: mild relief.' You almost laugh. Almost.",
+              shortDescription: "A NOTICE BOARD is pinned with flyers.",
             },
             {
               id: "lockers",
               name: "LOCKERS",
               examineText:
                 "Rows of grey lockers. Yours has the dent from the time Joshua tried to vault over them on a dare and did not, in fact, vault over them.",
+              shortDescription: "Rows of grey LOCKERS line the wall.",
             },
             {
               id: "lost_property",
               name: "LOST PROPERTY BOX",
-              examineText:
-                "A cardboard box of unclaimed sadness: one wellington boot, a retainer nobody's claimed in months, and — huh — half a sandwich, still wrapped.",
+              examineText: "A cardboard box of unclaimed sadness. The lid's closed.",
+              openExamineText:
+                "Inside: one wellington boot, a retainer nobody's claimed in months, and — huh — half a sandwich, still wrapped.",
+              shortDescription: "A LOST PROPERTY BOX sits on the bench, lid closed.",
+              openShortDescription: "The LOST PROPERTY BOX sits open on the bench.",
+              openable: true,
+              openText:
+                "You lift the lid. Unclaimed sadness awaits: one wellington boot, a retainer nobody's claimed in months, and — huh — half a sandwich, still wrapped.",
+              closeText: "You put the lid back on. Probably wise.",
             },
             {
               id: "sandwich",
               name: "HALF-EATEN SANDWICH",
               examineText: "Egg and cress, by the smell. Someone's initials are on the wrapper. Not yours.",
+              shortDescription: "A HALF-EATEN SANDWICH sits among the lost property.",
+              containedIn: "lost_property",
               takeable: true,
               itemId: "half_sandwich",
             },
@@ -164,6 +194,7 @@ export const episode1: EpisodeDef = {
               name: "FIRE EXTINGUISHER",
               examineText:
                 "Behind a little glass panel marked 'IN CASE OF EMERGENCY — BREAK GLASS.' No hammer needed; the panel's already cracked.",
+              shortDescription: "A FIRE EXTINGUISHER sits behind a cracked glass panel.",
               takeable: true,
               itemId: "fire_extinguisher",
             },
@@ -192,11 +223,13 @@ export const episode1: EpisodeDef = {
               name: "CARETAKER",
               examineText:
                 "He hasn't turned around. You can hear him breathing — a wet, rattling sound that doesn't feel entirely human. You should not get closer.",
+              excludeFromList: true,
             },
             {
               id: "closet",
               name: "SUPPLY CLOSET",
               examineText: "Mops, buckets, the smell of bleach. Small, but you'd fit. Probably.",
+              excludeFromList: true,
             },
           ],
           exits: [
@@ -236,13 +269,14 @@ export const episode1: EpisodeDef = {
           name: "School Reception",
           locationId: "school",
           description:
-            "The school reception is unmanned. The SIGN-IN BOOK is open on the desk. A cork board is covered in cheerful posters about half-term clubs that suddenly feel very far away.",
+            "The school reception is unmanned. A cork board is covered in cheerful posters about half-term clubs that suddenly feel very far away.",
           interactables: [
             {
               id: "sign_in_book",
               name: "SIGN-IN BOOK",
               examineText:
                 "Rows and rows of names, all present, all accounted for. Except you're the only person you've actually seen all morning.",
+              shortDescription: "The SIGN-IN BOOK lies open on the desk.",
             },
           ],
           exits: [{ aliases: ["forward", "e"], targetRoomId: "front_doors" }],
@@ -268,19 +302,21 @@ export const episode1: EpisodeDef = {
           name: "High Street",
           locationId: "high_street",
           description:
-            "The high street is quiet in a way that has nothing to do with what day it is. Shop signs hang still. The NEWSAGENT'S door is propped open, a radio murmuring to no one. A couple of PARKED CARS sit at odd angles, like their drivers just... stopped.",
+            "The high street is quiet in a way that has nothing to do with what day it is. Shop signs hang still.",
           interactables: [
             {
               id: "newsagent",
               name: "NEWSAGENT'S",
               examineText:
                 "Rows of chocolate bars, undisturbed. The radio's playing something with strings. No one's manning the till, but the till drawer's open.",
+              shortDescription: "The NEWSAGENT'S door is propped open, a radio murmuring to no one.",
             },
             {
               id: "parked_cars",
               name: "PARKED CARS",
               examineText:
                 "Nothing wrong with them, technically. Just parked like whoever was driving changed their mind halfway through parking.",
+              shortDescription: "A couple of PARKED CARS sit at odd angles on the street.",
             },
           ],
           exits: [{ aliases: ["forward", "e"], targetRoomId: "park_room" }],
@@ -289,19 +325,20 @@ export const episode1: EpisodeDef = {
           id: "park_room",
           name: "The Park",
           locationId: "park",
-          description:
-            "The park's SWINGS move gently, though there's no wind to speak of. No one's here — no dog walkers, no toddlers, no pensioners on the BENCH that's usually full of them.",
+          description: "The park is still and a little too quiet. No one's here — no dog walkers, no toddlers.",
           interactables: [
             {
               id: "swings",
               name: "SWINGS",
               examineText: "Empty, swinging in lazy little arcs. You watch them for a second too long.",
+              shortDescription: "The SWINGS move gently, though there's no wind to speak of.",
             },
             {
               id: "bench",
               name: "BENCH",
               examineText:
                 "A brass plaque reads 'IN MEMORY OF BARRY, WHO LOVED THIS BENCH.' Barry, if you're out there, this is a lot right now.",
+              shortDescription: "A BENCH sits empty, usually full of pensioners at this hour.",
             },
           ],
           exits: [{ aliases: ["home", "forward", "e"], targetRoomId: "front_garden" }],
@@ -318,12 +355,13 @@ export const episode1: EpisodeDef = {
           name: "Front Garden",
           locationId: "harpers_house",
           description:
-            "Your street looks normal, which almost makes it worse. Your house is right where you left it. The DOORMAT by the front DOOR reads 'LIVE, LAUGH, LOVE' in your mum's least ironic handwriting.",
+            "Your street looks normal, which almost makes it worse. Your house is right where you left it. The front DOOR is shut.",
           interactables: [
             {
               id: "doormat",
               name: "DOORMAT",
               examineText: "'Live, Laugh, Love.' You have never related to a doormat less.",
+              shortDescription: "A DOORMAT by the front door reads 'LIVE, LAUGH, LOVE.'",
             },
           ],
           exits: [{ aliases: ["door", "forward", "e"], targetRoomId: "hallway" }],
@@ -340,6 +378,7 @@ export const episode1: EpisodeDef = {
               name: "NOTE",
               examineText:
                 "Harper —\n\nI had to go. I can't explain it properly here, and I don't think you'd believe me if I tried. Please don't come looking. I promise I'll explain everything when I can.\n\nI love you. Stay safe.\n\n— Camille\n\n[DRAFT — placeholder note content, flagged for the project owner to hand-write.]",
+              excludeFromList: true,
               onExamineEffects: [
                 { type: "setFlag", flag: "camilleNoteFound", value: true },
                 { type: "endEpisode" },

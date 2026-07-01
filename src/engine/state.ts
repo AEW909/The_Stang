@@ -10,6 +10,8 @@ export interface Checkpoint {
   roomId: string;
   inventory: string[];
   flags: StoryFlags;
+  /** Open/closed state of openable interactables, keyed by "roomId:interactableId". */
+  openState: Record<string, boolean>;
 }
 
 export interface GameState {
@@ -19,6 +21,7 @@ export interface GameState {
   inventory: string[];
   currentSceneId: string;
   currentRoomId: string;
+  openState: Record<string, boolean>;
   checkpoint: Checkpoint;
   ended: boolean;
 }
@@ -57,11 +60,13 @@ export function createInitialState(
     inventory: [],
     currentSceneId: startScene.id,
     currentRoomId: startScene.startRoomId,
+    openState: {},
     checkpoint: {
       sceneId: startScene.id,
       roomId: startScene.startRoomId,
       inventory: [],
       flags: { ...flags },
+      openState: {},
     },
     ended: false,
   };
@@ -74,6 +79,7 @@ export function restartFromCheckpoint(state: GameState): GameState {
     inventory: [...state.checkpoint.inventory],
     currentSceneId: state.checkpoint.sceneId,
     currentRoomId: state.checkpoint.roomId,
+    openState: { ...state.checkpoint.openState },
     ended: false,
   };
 }

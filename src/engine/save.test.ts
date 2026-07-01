@@ -34,6 +34,7 @@ describe("save/load", () => {
     stats.bravery = 8;
     const profile = createPlayerProfile("Harper", stats);
     let state = createInitialState(profile, campaign.initialFlags, episode1);
+    state = processCommand(state, campaign, episode1, "open drawer").state;
     state = processCommand(state, campaign, episode1, "take key").state;
     state = processCommand(state, campaign, episode1, "use key on door").state;
 

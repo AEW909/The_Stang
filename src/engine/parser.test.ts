@@ -29,6 +29,17 @@ describe("parseCommand", () => {
     expect(parseCommand("use key")).toEqual({ verb: "use", target: "key", secondTarget: undefined });
   });
 
+  it("parses open and close, including the 'shut' alias for close", () => {
+    expect(parseCommand("open drawer")).toEqual({ verb: "open", target: "drawer" });
+    expect(parseCommand("close drawer")).toEqual({ verb: "close", target: "drawer" });
+    expect(parseCommand("shut drawer")).toEqual({ verb: "close", target: "drawer" });
+  });
+
+  it("returns unknown for open/close missing a required target", () => {
+    expect(parseCommand("open")).toEqual({ verb: "unknown", raw: "open" });
+    expect(parseCommand("close")).toEqual({ verb: "unknown", raw: "close" });
+  });
+
   it("parses take, drop, talk, health, map, restart, help", () => {
     expect(parseCommand("take key")).toEqual({ verb: "take", target: "key" });
     expect(parseCommand("drop key")).toEqual({ verb: "drop", target: "key" });

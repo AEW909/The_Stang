@@ -6,6 +6,26 @@
 
 ---
 
+## 0. Status: Slice 1 shipped
+
+**Slice 1 is complete, verified, and considered fully shippable as of 2026-07-01.** All acceptance criteria in Section 5 pass (54 Vitest tests, clean `tsc`, full manual playthrough including reload-resume, evasion failure + `restart`, and the flavour-item fallback). Pushed to `main` on the `AEW909/The_Stang` GitHub repo. First real playtest with the intended player is planned for 2026-07-02, with feedback to follow.
+
+Two decision points this document originally left open were resolved during the build and are now locked:
+- **Hero-creator point-buy:** base 3 / pool 10 / max 8 per stat (min 3, can't go lower). Confirmed as a good balance — "at 8 points, each upgrade is a meaningful increase in ability."
+- **Episode 1 scene/checkpoint breakdown:** five scenes — Waking Up, The Caretaker, Escape the School, The Quiet Walk Home, Home — each its own checkpoint boundary. See Section 5 for the original reasoning.
+
+Two things were added on top of the original Slice 1 scope, at the project owner's request, and are now part of the standing engine contract (see Section 3):
+- **`open`/`close` (+ `shut`) verbs**, for containers with real, persisted, checkpointed open/closed state.
+- **Deterministic room descriptions** — a room's authored `description` never names an ordinary prop directly; `look` auto-appends a "You can also see" line from whichever interactables are currently revealed and not yet taken. This replaced hand-assembling CAPS mentions into room prose, to stop room text and room data from drifting apart as more episodes get added.
+
+A `?reset` URL query param (undocumented in the UI, see `src/App.tsx`) wipes the `localStorage` save on load, for the project owner to clear their own testing progress before handing the game to its actual player.
+
+Camille's note (`data/episodes/episode1.ts`, `hallway` room) is still placeholder text, flagged in the file for the project owner to hand-write.
+
+Slice 2 (dialogue, NPC introductions, trust/honesty, Episode 2) is sketched only — not started.
+
+---
+
 ## 1. Project brief
 
 **What it is:** A browser-based, 1980s-terminal-style text adventure game — green text on black background, CRT aesthetic — built as a personal gift for a 10-year-old girl. It is a narrative campaign told across episodes (starting with 8, extensible later), combining exploration/parser gameplay, dialogue choices, light stat-based combat, and an NPC trust/relationship system.
@@ -39,7 +59,9 @@
 ## 3. Conventions
 
 - **Engine/content separation is sacred.** `engine.ts` (or equivalent module split) contains state management, the parser, command resolution, dice/roll logic, save/load — zero references to specific episodes, characters, or story text. `data/` contains all story content: rooms, items, dialogue trees, NPC definitions. A new episode should be addable by writing new data files, not by editing engine code, except where an episode requires a genuinely new *mechanic* (which should be rare and flagged).
-- **Parser vocabulary stays constrained and visible.** Core verbs: `go`/`n`/`s`/`e`/`w`, `look`/`l`, `examine`/`x`, `inventory`/`i`, `take`, `drop`, `use`, `talk`, `health`, `map`, `restart`, `help`/`/?`. Interactable objects are shown in CAPS in room descriptions. A suggestions bar above the input shows contextually relevant commands for the current scene. This matches the tone established by the original prototype and should carry through.
+- **Parser vocabulary stays constrained and visible.** Core verbs: `go`/`n`/`s`/`e`/`w`, `look`/`l`, `examine`/`x`, `inventory`/`i`, `take`, `drop`, `use`, `open`, `close`/`shut`, `talk`, `health`, `map`, `restart`, `help`/`/?`. Interactable objects are shown in CAPS in room descriptions. A suggestions bar above the input shows contextually relevant commands for the current scene. This matches the tone established by the original prototype and should carry through.
+- **Room descriptions are deterministic, not hand-assembled.** A room's `description` is fixed atmosphere/exit/NPC text only — it never names an ordinary prop directly. Every prop gets a `shortDescription`; `look` auto-appends a "You can also see" line built from whichever interactables are currently revealed (not hidden inside a closed container) and not yet taken (checked against inventory, no separate "taken" bookkeeping needed). An interactable can opt out via `excludeFromList` for NPCs and plot-critical objects that deserve full prose instead of a bullet. This is a core engine contract (see `describeRoom` in `engine/commands.ts`), not a per-episode formatting choice — it exists so room text and room data can never silently drift out of sync as more episodes are added.
+- **Containers use `open`/`close`, not `examine`, to reveal what's inside.** An interactable marked `containedIn: <containerId>` is invisible to `look`/`examine`/`take` until that container is opened; opening/closing is real, persisted, checkpointed state (`GameState.openState`), not a one-way flag. This is how "Harper opens a drawer/cupboard and something new becomes visible" is meant to be authored going forward.
 - **Dialogue and combat are menu-driven** (numbered choices), not parsed free text — this is a deliberate departure from exploration, made because both need precise branching and stat-checking logic that free text can't support reliably.
 - **Items are explicitly tagged `essential` or `flavour` in their data definition.** Essential items have exactly one valid use and cannot be repurposed. Flavour items may have 0–4 hand-authored scene-specific `USE` outcomes; any `USE` attempt not specifically authored for the current scene must return a graceful, in-character non-broken fallback (never a generic error). This tagging and the fallback behavior are core engine contracts, not per-episode afterthoughts — build them into the engine from Slice 1 even though Episode 1 will only lightly exercise them.
 - **Checkpoints save at the end of every scene**, not just at episode boundaries. Death/failure states restart from the most recent scene checkpoint, not the start of the episode.
@@ -104,14 +126,14 @@ This is the only slice to build in full detail right now. It must deliver a comp
 8. **Episode 1 content**, written to the premise above: wake alone in the school → escape the building (caretaker evasion encounter along the way) → walk home through an unnervingly quiet town → arrive home → find Camille's note. **The note's contents are not yet decided — write it as a hook that establishes urgency and confusion without resolving anything (Camille is gone, something's wrong, no explanation given), and flag it clearly as a placeholder I will likely want to hand-write myself.**
 9. Episode ends on the note as a hard stop / cliffhanger screen — no Episode 2 content, just a clear "end of episode" state.
 
-**Acceptance criteria for Slice 1:**
-- A new player can run the hero creator, get to Episode 1, play it start to finish using only the documented verb set, and reach the note cliffhanger.
-- Closing the browser and reopening resumes from the last scene checkpoint, with hero stats and inventory intact.
-- At least one item is tagged `essential` and at least one is tagged `flavour` with a couple of authored `USE` outcomes, demonstrating both paths work, including the non-broken fallback for an unauthored `USE`.
-- The caretaker (or equivalent) encounter can be evaded through more than one method (e.g. an item-based option and a pure command-based option).
-- Engine logic (parser, state transitions, save/load, item resolution) has Vitest coverage, written alongside the engine, not bolted on after.
-- `restart` correctly returns to the last scene checkpoint, not the very start of the episode.
-- `data/campaign.ts` and `data/episodes/episode1.ts` are genuinely separate files with a clean reference boundary — Episode 1's file should not redefine locations, NPCs, or stats that belong in the campaign file, and the campaign file should contain no Episode-1-specific scene content.
+**Acceptance criteria for Slice 1 — all verified (see Section 0):**
+- [x] A new player can run the hero creator, get to Episode 1, play it start to finish using only the documented verb set, and reach the note cliffhanger.
+- [x] Closing the browser and reopening resumes from the last scene checkpoint, with hero stats and inventory intact.
+- [x] At least one item is tagged `essential` and at least one is tagged `flavour` with a couple of authored `USE` outcomes, demonstrating both paths work, including the non-broken fallback for an unauthored `USE`.
+- [x] The caretaker (or equivalent) encounter can be evaded through more than one method (e.g. an item-based option and a pure command-based option).
+- [x] Engine logic (parser, state transitions, save/load, item resolution) has Vitest coverage, written alongside the engine, not bolted on after.
+- [x] `restart` correctly returns to the last scene checkpoint, not the very start of the episode.
+- [x] `data/campaign.ts` and `data/episodes/episode1.ts` are genuinely separate files with a clean reference boundary — Episode 1's file should not redefine locations, NPCs, or stats that belong in the campaign file, and the campaign file should contain no Episode-1-specific scene content.
 
 ### Slice 2 (rough — do not build yet, sketch only for later)
 Dialogue system (menu-driven, branching), NPC introductions (Ellie, Isabella, Akira, Joshua), NPC trust/honesty as numeric variables that shift based on interaction choices. Episode 2 content: Harper realizes Camille is missing, reaches out to the friend group.
@@ -135,13 +157,13 @@ Episodes 4 through 8, escalating per the season spine in `docs/CAMPAIGN_BIBLE.md
 
 ## 7. Verification
 
-After Slice 1 is built:
-1. Run `npm test` — all engine tests pass.
-2. Run `npm run dev`, play Episode 1 start to finish using only documented commands, confirm the cliffhanger note screen is reached.
-3. Reload the browser mid-episode (after at least one checkpoint) and confirm state resumes correctly (location, inventory, stats).
-4. Deliberately trigger the caretaker evasion encounter's failure path and confirm `restart` returns to the last scene checkpoint, not episode start.
-5. Attempt a `USE` on a flavour item in a scene where it has no authored outcome — confirm the fallback response is graceful and in-character, not an error or dead end.
-6. Confirm no network calls occur during gameplay (no AI API calls, no database calls) — this should be verifiable just by inspecting the code, since none should exist.
+After Slice 1 is built — all steps below completed, see Section 0:
+1. [x] Run `npm test` — all engine tests pass (54/54).
+2. [x] Run `npm run dev`, play Episode 1 start to finish using only documented commands, confirm the cliffhanger note screen is reached.
+3. [x] Reload the browser mid-episode (after at least one checkpoint) and confirm state resumes correctly (location, inventory, stats).
+4. [x] Deliberately trigger the caretaker evasion encounter's failure path and confirm `restart` returns to the last scene checkpoint, not episode start.
+5. [x] Attempt a `USE` on a flavour item in a scene where it has no authored outcome — confirm the fallback response is graceful and in-character, not an error or dead end.
+6. [x] Confirm no network calls occur during gameplay (no AI API calls, no database calls) — this should be verifiable just by inspecting the code, since none should exist.
 
 ---
 

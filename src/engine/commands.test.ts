@@ -20,15 +20,107 @@ function run(state: GameState, ...commands: string[]): GameState {
   return next;
 }
 
-/** classroom -> corridor_1, key found and door unlocked, extinguisher not yet taken. */
+function look(state: GameState): string {
+  return processCommand(state, campaign, episode1, "look").output.join(" ");
+}
+
+/** classroom -> corridor_1, key found (drawer opened) and door unlocked, extinguisher not yet taken. */
 function inCorridor1(): GameState {
-  return run(newGame(), "take key", "use key on door");
+  return run(newGame(), "open drawer", "take key", "use key on door");
 }
 
 /** classroom -> corridor_2, right before the caretaker encounter, key held. */
 function atCaretaker(): GameState {
   return run(inCorridor1(), "go forward");
 }
+
+describe("Episode 1 — deterministic room descriptions", () => {
+  it("lists visible props in a 'You can also see' line, excluding hidden contained items", () => {
+    const text = look(newGame());
+    expect(text).toMatch(/You can also see:/);
+    expect(text).toMatch(/TEACHER'S DESK/);
+    expect(text).toMatch(/WINDOW/);
+    expect(text).toMatch(/POSTER/);
+    expect(text).toMatch(/HAMSTER CAGE/);
+    expect(text).not.toMatch(/BRASS KEY/);
+  });
+
+  it("shows the closed-drawer fragment before opening it, and the open one after", () => {
+    const before = look(newGame());
+    expect(before).toMatch(/doesn't look properly shut/);
+
+    const afterOpen = run(newGame(), "open drawer");
+    expect(look(afterOpen)).toMatch(/hangs open, something glinting inside/);
+    expect(look(afterOpen)).toMatch(/BRASS KEY/);
+  });
+
+  it("drops an item from the list once it's taken, without needing separate 'taken' bookkeeping", () => {
+    const withKey = run(newGame(), "open drawer", "take key");
+    expect(look(withKey)).not.toMatch(/BRASS KEY/);
+    expect(withKey.inventory).toContain("spare_key");
+  });
+
+  it("keeps permanent scenery in the list even once every takeable item is gone", () => {
+    const cleared = run(inCorridor1(), "open lost property", "take sandwich", "take extinguisher");
+    const text = look(cleared);
+    // Nothing takeable left, but the room still has non-takeable fixtures.
+    expect(text).toMatch(/NOTICE BOARD/);
+    expect(text).toMatch(/LOCKERS/);
+    expect(text).not.toMatch(/HALF-EATEN SANDWICH/);
+    expect(text).not.toMatch(/FIRE EXTINGUISHER/);
+  });
+
+  it("excludes NPCs and plot-critical objects (caretaker, note) from the auto-list entirely", () => {
+    const text = look(atCaretaker());
+    // The caretaker and the supply closet are both excludeFromList — with nothing else
+    // in the room, the footer line should be omitted rather than printed empty.
+    expect(text).toMatch(/CARETAKER/); // still described in authored prose
+    expect(text).not.toMatch(/You can also see/i);
+  });
+});
+
+describe("Episode 1 — open/close verbs", () => {
+  it("can't take or examine a contained item before its container is opened", () => {
+    const takeResult = processCommand(newGame(), campaign, episode1, "take key");
+    expect(takeResult.output.join(" ")).toMatch(/don't see/i);
+
+    const examineResult = processCommand(newGame(), campaign, episode1, "examine key");
+    expect(examineResult.output.join(" ")).toMatch(/don't see/i);
+  });
+
+  it("reports already-open and already-closed states gracefully", () => {
+    const opened = run(newGame(), "open drawer");
+    const reopened = processCommand(opened, campaign, episode1, "open drawer");
+    expect(reopened.output.join(" ")).toMatch(/already open/i);
+
+    const closed = run(opened, "close drawer");
+    const reclosed = processCommand(closed, campaign, episode1, "close drawer");
+    expect(reclosed.output.join(" ")).toMatch(/already closed/i);
+  });
+
+  it("re-hides a contained item once its container is closed again", () => {
+    const opened = run(newGame(), "open drawer");
+    expect(look(opened)).toMatch(/BRASS KEY/);
+
+    const closed = run(opened, "close drawer");
+    expect(look(closed)).not.toMatch(/BRASS KEY/);
+    const takeResult = processCommand(closed, campaign, episode1, "take key");
+    expect(takeResult.output.join(" ")).toMatch(/don't see/i);
+  });
+
+  it("refuses to open or close things that aren't containers", () => {
+    const openResult = processCommand(newGame(), campaign, episode1, "open desk");
+    expect(openResult.output.join(" ")).toMatch(/can't open/i);
+
+    const closeResult = processCommand(newGame(), campaign, episode1, "close desk");
+    expect(closeResult.output.join(" ")).toMatch(/can't close/i);
+  });
+
+  it("gives a graceful message when opening something that isn't there", () => {
+    const result = processCommand(newGame(), campaign, episode1, "open cupboard");
+    expect(result.output.join(" ")).toMatch(/don't see/i);
+  });
+});
 
 describe("Episode 1 — locked classroom puzzle", () => {
   it("keeps the door locked until the key is found and used", () => {
@@ -38,12 +130,11 @@ describe("Episode 1 — locked classroom puzzle", () => {
     expect(blocked.state.currentRoomId).toBe("classroom");
   });
 
-  it("lets the player examine the desk and drawer, take the key, and unlock the door", () => {
-    const state = newGame();
-    const afterExamine = processCommand(state, campaign, episode1, "examine desk");
-    expect(afterExamine.output.join(" ")).toMatch(/drawer/i);
+  it("lets the player open the drawer, take the key, and unlock the door", () => {
+    const afterOpen = processCommand(newGame(), campaign, episode1, "open drawer");
+    expect(afterOpen.output.join(" ")).toMatch(/glints inside/i);
 
-    const afterTake = processCommand(afterExamine.state, campaign, episode1, "take key");
+    const afterTake = processCommand(afterOpen.state, campaign, episode1, "take key");
     expect(afterTake.state.inventory).toContain("spare_key");
 
     const afterUse = processCommand(afterTake.state, campaign, episode1, "use key on door");
@@ -51,14 +142,14 @@ describe("Episode 1 — locked classroom puzzle", () => {
   });
 
   it("also auto-unlocks the door via a bare 'go door' once the key is held", () => {
-    const afterTake = processCommand(newGame(), campaign, episode1, "take key");
-    const afterGo = processCommand(afterTake.state, campaign, episode1, "go door");
+    const afterTake = run(newGame(), "open drawer", "take key");
+    const afterGo = processCommand(afterTake, campaign, episode1, "go door");
     expect(afterGo.state.currentRoomId).toBe("corridor_1");
   });
 
   it("essential item shows a wrong-use message when used on the wrong target", () => {
-    const afterTake = processCommand(newGame(), campaign, episode1, "take key");
-    const result = processCommand(afterTake.state, campaign, episode1, "use key on window");
+    const afterTake = run(newGame(), "open drawer", "take key");
+    const result = processCommand(afterTake, campaign, episode1, "use key on window");
     expect(result.output.join(" ")).toMatch(/doesn't fit/i);
     expect(result.state.currentRoomId).toBe("classroom");
   });
@@ -82,7 +173,7 @@ describe("Episode 1 — flavour item contract", () => {
   });
 
   it("falls back gracefully for a flavour item with no authored outcome anywhere", () => {
-    const state = run(inCorridor1(), "take sandwich");
+    const state = run(inCorridor1(), "open lost property", "take sandwich");
     const used = processCommand(state, campaign, episode1, "use sandwich");
     expect(used.output.join(" ")).toMatch(/reconsider/i);
     expect(used.output.join(" ")).not.toMatch(/error|undefined|NaN/i);
@@ -173,6 +264,16 @@ describe("Episode 1 — checkpoints", () => {
     expect(restarted.currentRoomId).toBe("corridor_3");
     expect(restarted.flags.caretakerEvaded).toBe(true);
   });
+
+  it("restart also reverts open/closed container state to the checkpoint snapshot", () => {
+    const openedDrawer = run(newGame(), "open drawer");
+    expect(look(openedDrawer)).toMatch(/BRASS KEY/);
+
+    // Still inside the "waking_up" scene, so the checkpoint (taken at episode start,
+    // before the drawer was opened) hasn't moved.
+    const restarted = restartFromCheckpoint(openedDrawer);
+    expect(look(restarted)).not.toMatch(/BRASS KEY/);
+  });
 });
 
 describe("Episode 1 — full playthrough reaches the cliffhanger", () => {
@@ -180,10 +281,12 @@ describe("Episode 1 — full playthrough reaches the cliffhanger", () => {
     const final = run(
       newGame(),
       "examine desk",
-      "examine drawer",
+      "open drawer",
       "take key",
       "use key on door",
       "examine noticeboard",
+      "open lost property",
+      "take sandwich",
       "take extinguisher",
       "go forward",
       "go closet",
@@ -207,6 +310,7 @@ describe("Episode 1 — full playthrough reaches the cliffhanger", () => {
   it("shows the episode-ended message once finished, and restart still works", () => {
     const final = run(
       newGame(),
+      "open drawer",
       "take key",
       "use key on door",
       "go forward",

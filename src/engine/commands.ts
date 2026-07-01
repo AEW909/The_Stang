@@ -1,4 +1,4 @@
-import type { Campaign, EngineEffect, EpisodeDef, ExitDef, ItemDef, RoomDef } from "./types";
+import type { Campaign, EngineEffect, EpisodeDef, ExitDef, InteractableDef, ItemDef, RoomDef } from "./types";
 import { findItem, findRoom, restartFromCheckpoint, type GameState } from "./state";
 import { parseCommand } from "./parser";
 
@@ -16,6 +16,8 @@ const HELP_TEXT = [
   "  take <thing>         - pick something up",
   "  drop <thing>         - put something down",
   "  use <thing> [on <target>] - use an item",
+  "  open <thing>         - open a container",
+  "  close <thing>        - close a container",
   "  talk <someone>       - try to talk to someone",
   "  health               - check your stats",
   "  map                  - see where you can go from here",
@@ -39,8 +41,28 @@ function matchesToken(token: string, input: string): boolean {
   return a === b || a.includes(b) || b.includes(a);
 }
 
-function findInteractable(room: RoomDef, target: string) {
-  return room.interactables.find((i) => matchesName(i.name, i.id, target));
+/** Open/closed state is keyed by "roomId:interactableId" in GameState.openState. */
+function openKey(roomId: string, interactableId: string): string {
+  return `${roomId}:${interactableId}`;
+}
+
+function isOpen(state: GameState, room: RoomDef, interactable: InteractableDef): boolean {
+  const key = openKey(room.id, interactable.id);
+  if (key in state.openState) return state.openState[key];
+  return interactable.startsOpen ?? false;
+}
+
+/** A contained interactable (e.g. a key inside a drawer) is only visible/matchable
+ * while its container is open. Everything else is always visible. */
+function isRevealed(state: GameState, room: RoomDef, interactable: InteractableDef): boolean {
+  if (!interactable.containedIn) return true;
+  const container = room.interactables.find((i) => i.id === interactable.containedIn);
+  if (!container) return true;
+  return isOpen(state, room, container);
+}
+
+function findInteractable(state: GameState, room: RoomDef, target: string): InteractableDef | undefined {
+  return room.interactables.find((i) => isRevealed(state, room, i) && matchesName(i.name, i.id, target));
 }
 
 function findExit(room: RoomDef, target: string): ExitDef | undefined {
@@ -101,13 +123,37 @@ function syncSceneAndCheckpoint(state: GameState, episode: EpisodeDef): GameStat
       roomId: state.currentRoomId,
       inventory: [...state.inventory],
       flags: { ...state.flags },
+      openState: { ...state.openState },
     },
   };
 }
 
+/** The deterministic room-description contract: a fixed base description,
+ * plus an auto-generated "You can also see" line built from whichever
+ * interactables are currently revealed and not yet taken. An interactable
+ * drops out once it's taken (derived from inventory, no extra state needed)
+ * or stays out until its container is opened (see isRevealed). NPCs and
+ * plot-critical objects opt out via excludeFromList and stay in authored prose. */
 function describeRoom(state: GameState, episode: EpisodeDef): string[] {
   const { room } = findRoom(episode, state.currentRoomId);
-  return [`-- ${room.name} --`, room.description];
+  const lines = [`-- ${room.name} --`, room.description];
+
+  const footerItems = room.interactables.filter((i) => {
+    if (i.excludeFromList) return false;
+    if (!isRevealed(state, room, i)) return false;
+    if (i.itemId && state.inventory.includes(i.itemId)) return false;
+    return true;
+  });
+
+  if (footerItems.length > 0) {
+    const fragments = footerItems.map((i) => {
+      if (i.openable && isOpen(state, room, i) && i.openShortDescription) return i.openShortDescription;
+      return i.shortDescription ?? i.name;
+    });
+    lines.push(`You can also see: ${fragments.join(" ")}`);
+  }
+
+  return lines;
 }
 
 function resolveGo(state: GameState, episode: EpisodeDef, target: string): CommandResult {
@@ -140,9 +186,10 @@ function resolveGo(state: GameState, episode: EpisodeDef, target: string): Comma
 
 function resolveExamine(state: GameState, episode: EpisodeDef, target: string): CommandResult {
   const { room } = findRoom(episode, state.currentRoomId);
-  const interactable = findInteractable(room, target);
+  const interactable = findInteractable(state, room, target);
   if (interactable) {
-    const output = [interactable.examineText];
+    const useOpenText = interactable.openable && isOpen(state, room, interactable) && interactable.openExamineText;
+    const output = [useOpenText || interactable.examineText];
     let next = state;
     if (interactable.onExamineEffects) {
       const applied = applyEffects(next, episode, interactable.onExamineEffects);
@@ -164,7 +211,7 @@ function resolveExamine(state: GameState, episode: EpisodeDef, target: string): 
 
 function resolveTake(state: GameState, episode: EpisodeDef, target: string): CommandResult {
   const { room } = findRoom(episode, state.currentRoomId);
-  const interactable = findInteractable(room, target);
+  const interactable = findInteractable(state, room, target);
   if (!interactable) return { state, output: [`You don't see "${target}" here.`] };
   if (!interactable.takeable || !interactable.itemId) {
     return { state, output: ["You can't take that."] };
@@ -182,6 +229,30 @@ function resolveDrop(state: GameState, episode: EpisodeDef, target: string): Com
   if (!item) return { state, output: ["You're not carrying that."] };
   const next: GameState = { ...state, inventory: state.inventory.filter((id) => id !== item.id) };
   return { state: next, output: [`You drop the ${item.name}.`] };
+}
+
+function resolveOpen(state: GameState, episode: EpisodeDef, target: string): CommandResult {
+  const { room } = findRoom(episode, state.currentRoomId);
+  const interactable = findInteractable(state, room, target);
+  if (!interactable) return { state, output: [`You don't see "${target}" here.`] };
+  if (!interactable.openable) return { state, output: ["You can't open that."] };
+  if (isOpen(state, room, interactable)) return { state, output: ["It's already open."] };
+
+  const key = openKey(room.id, interactable.id);
+  const next: GameState = { ...state, openState: { ...state.openState, [key]: true } };
+  return { state: next, output: [interactable.openText ?? `You open the ${interactable.name}.`] };
+}
+
+function resolveClose(state: GameState, episode: EpisodeDef, target: string): CommandResult {
+  const { room } = findRoom(episode, state.currentRoomId);
+  const interactable = findInteractable(state, room, target);
+  if (!interactable) return { state, output: [`You don't see "${target}" here.`] };
+  if (!interactable.openable) return { state, output: ["You can't close that."] };
+  if (!isOpen(state, room, interactable)) return { state, output: ["It's already closed."] };
+
+  const key = openKey(room.id, interactable.id);
+  const next: GameState = { ...state, openState: { ...state.openState, [key]: false } };
+  return { state: next, output: [interactable.closeText ?? `You close the ${interactable.name}.`] };
 }
 
 function resolveUse(state: GameState, episode: EpisodeDef, targetRaw: string, secondTargetRaw: string | undefined): CommandResult {
@@ -246,7 +317,14 @@ export function getSuggestions(state: GameState, episode: EpisodeDef): string[] 
   const { room } = findRoom(episode, state.currentRoomId);
   const suggestions: string[] = [];
   for (const exit of room.exits) suggestions.push(`go ${exit.aliases[0]}`);
-  for (const interactable of room.interactables) suggestions.push(`examine ${interactable.name.toLowerCase()}`);
+  for (const interactable of room.interactables) {
+    if (!isRevealed(state, room, interactable)) continue;
+    if (interactable.itemId && state.inventory.includes(interactable.itemId)) continue;
+    suggestions.push(`examine ${interactable.name.toLowerCase()}`);
+    if (interactable.openable) {
+      suggestions.push(isOpen(state, room, interactable) ? `close ${interactable.name.toLowerCase()}` : `open ${interactable.name.toLowerCase()}`);
+    }
+  }
   suggestions.push("inventory", "help");
   return suggestions;
 }
@@ -314,6 +392,12 @@ export function processCommand(
       break;
     case "use":
       result = resolveUse(state, episode, cmd.target, cmd.secondTarget);
+      break;
+    case "open":
+      result = resolveOpen(state, episode, cmd.target);
+      break;
+    case "close":
+      result = resolveClose(state, episode, cmd.target);
       break;
   }
 
