@@ -1,0 +1,159 @@
+@font-face {
+  font-family: "VT323";
+  src: local("Courier New");
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  height: 100%;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+body {
+  font-family: "Courier New", "VT323", monospace;
+}
+
+.crt-screen {
+  min-height: 100vh;
+  background: #000;
+  color: #33ff33;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-shadow: 0 0 3px rgba(51, 255, 51, 0.6);
+  position: relative;
+  overflow: hidden;
+}
+
+.crt-screen::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 1px,
+    rgba(0, 0, 0, 0.25) 2px
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+.crt-title {
+  font-size: 1.4rem;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.stat-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 420px;
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: 120px 32px 40px 32px;
+  align-items: center;
+  gap: 8px;
+}
+
+.stat-label {
+  font-size: 1.1rem;
+}
+
+.stat-value {
+  text-align: center;
+  font-size: 1.2rem;
+}
+
+.crt-screen button {
+  background: transparent;
+  color: #33ff33;
+  border: 1px solid #33ff33;
+  font-family: inherit;
+  font-size: 1rem;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.crt-screen button:hover:not(:disabled) {
+  background: rgba(51, 255, 51, 0.15);
+}
+
+.crt-screen button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.confirm-button {
+  align-self: flex-start;
+  margin-top: 12px;
+  padding: 10px 18px;
+}
+
+.terminal {
+  height: 100vh;
+  box-sizing: border-box;
+}
+
+.terminal-output {
+  flex: 1;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  padding-right: 8px;
+}
+
+.line-input {
+  color: #7bffb0;
+}
+
+.line-output {
+  margin-bottom: 10px;
+}
+
+.suggestions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-top: 1px solid rgba(51, 255, 51, 0.3);
+  padding-top: 8px;
+}
+
+.suggestion-chip {
+  font-size: 0.85rem;
+  padding: 3px 8px;
+  text-transform: uppercase;
+}
+
+.terminal-input-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px solid rgba(51, 255, 51, 0.3);
+  padding-top: 8px;
+}
+
+.terminal-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #33ff33;
+  font-family: inherit;
+  font-size: 1.1rem;
+  outline: none;
+  text-shadow: 0 0 3px rgba(51, 255, 51, 0.6);
+}

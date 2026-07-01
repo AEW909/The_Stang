@@ -1,0 +1,94 @@
+// Tokenizes raw player input into a structured command. Vocabulary is
+// intentionally fixed and small — see docs/SLICE1_HANDOFF.md Conventions.
+
+export type ParsedCommand =
+  | { verb: "go"; target: string }
+  | { verb: "look" }
+  | { verb: "examine"; target: string }
+  | { verb: "inventory" }
+  | { verb: "take"; target: string }
+  | { verb: "drop"; target: string }
+  | { verb: "use"; target: string; secondTarget?: string }
+  | { verb: "talk"; target?: string }
+  | { verb: "health" }
+  | { verb: "map" }
+  | { verb: "restart" }
+  | { verb: "help" }
+  | { verb: "empty" }
+  | { verb: "unknown"; raw: string };
+
+const DIRECTIONS = new Set(["n", "s", "e", "w"]);
+
+const VERB_ALIASES: Record<string, string> = {
+  go: "go",
+  n: "go",
+  s: "go",
+  e: "go",
+  w: "go",
+  look: "look",
+  l: "look",
+  examine: "examine",
+  x: "examine",
+  inventory: "inventory",
+  i: "inventory",
+  take: "take",
+  get: "take",
+  drop: "drop",
+  use: "use",
+  talk: "talk",
+  health: "health",
+  stats: "health",
+  map: "map",
+  restart: "restart",
+  help: "help",
+  "?": "help",
+};
+
+export function parseCommand(raw: string): ParsedCommand {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return { verb: "empty" };
+
+  const tokens = trimmed.split(/\s+/);
+  const first = tokens[0];
+
+  if (DIRECTIONS.has(first) && tokens.length === 1) {
+    return { verb: "go", target: first };
+  }
+
+  const canonicalVerb = VERB_ALIASES[first];
+  if (!canonicalVerb) return { verb: "unknown", raw: trimmed };
+
+  const rest = tokens.slice(1).join(" ").trim();
+
+  switch (canonicalVerb) {
+    case "go":
+      return rest ? { verb: "go", target: rest } : { verb: "unknown", raw: trimmed };
+    case "look":
+      return { verb: "look" };
+    case "examine":
+      return rest ? { verb: "examine", target: rest } : { verb: "unknown", raw: trimmed };
+    case "inventory":
+      return { verb: "inventory" };
+    case "take":
+      return rest ? { verb: "take", target: rest } : { verb: "unknown", raw: trimmed };
+    case "drop":
+      return rest ? { verb: "drop", target: rest } : { verb: "unknown", raw: trimmed };
+    case "use": {
+      if (!rest) return { verb: "unknown", raw: trimmed };
+      const onSplit = rest.split(/\s+on\s+/);
+      return { verb: "use", target: onSplit[0], secondTarget: onSplit[1] };
+    }
+    case "talk":
+      return { verb: "talk", target: rest || undefined };
+    case "health":
+      return { verb: "health" };
+    case "map":
+      return { verb: "map" };
+    case "restart":
+      return { verb: "restart" };
+    case "help":
+      return { verb: "help" };
+    default:
+      return { verb: "unknown", raw: trimmed };
+  }
+}
