@@ -22,6 +22,10 @@ export const episode1: EpisodeDef = {
   title: "Episode 1: The Walk Home",
   prerequisites: [],
   startSceneId: "waking_up",
+  // No NPC dialogue in Episode 1 — Harper is alone throughout (see docs/SLICE1_HANDOFF.md
+  // Section 4). The dialogue/trust/party engine exists from Slice 2 onward; Episode 2 is
+  // the first to actually populate this array.
+  dialogues: [],
   items: [
     {
       id: "spare_key",
@@ -139,7 +143,6 @@ export const episode1: EpisodeDef = {
             {
               aliases: ["door", "n"],
               targetRoomId: "corridor_1",
-              locked: true,
               unlocksWithItemId: "spare_key",
               lockedText:
                 "The handle turns but the door doesn't budge. Locked. Weird — classrooms don't usually lock from this side.",
@@ -216,7 +219,7 @@ export const episode1: EpisodeDef = {
           name: "School Corridor — Caretaker",
           locationId: "school",
           description:
-            "You round the corner and stop dead. The CARETAKER is standing at the far end of the corridor, back to you, swaying slightly, like he's listening to music only he can hear. Except there's no music. His overalls are stained dark in a way you don't want to think about. A SUPPLY CLOSET door is ajar just beside you. The only way FORWARD is past him.",
+            "You round the corner and stop dead. The CARETAKER is standing at the far end of the corridor, back to you, swaying slightly, like he's listening to music only he can hear. Except there's no music. His overalls are stained dark in a way you don't want to think about. A SUPPLY CLOSET door is ajar just beside you. Your mind races through every option — hide, fight, run, or just get out of here the way you came.",
           interactables: [
             {
               id: "caretaker",
@@ -234,17 +237,43 @@ export const episode1: EpisodeDef = {
           ],
           exits: [
             {
-              aliases: ["closet", "supply closet"],
+              aliases: ["closet", "supply closet", "hide"],
               targetRoomId: "corridor_3",
+              successText:
+                "You duck into the supply closet and ease the door almost shut, heart slamming against your ribs. Through the gap you watch him shuffle past, moaning like a broken hinge, and turn the corner out of sight. When the corridor's silent again, you slip out and hurry on.",
               onSuccess: [{ type: "setFlag", flag: "caretakerEvaded", value: true }],
+            },
+            {
+              aliases: ["push", "push past"],
+              targetRoomId: "corridor_3",
+              requires: { stat: "fight", min: 7 },
+              successText:
+                "You put your head down and barrel past him before he can react, shoulder-checking him into the lockers. He lets out a wet groan behind you, but you're already gone.",
+              onSuccess: [{ type: "setFlag", flag: "caretakerEvaded", value: true }],
+              lockedText:
+                "You try to force your way past — but he's stronger than he looks. He shoves back hard and you stumble away, narrowly avoiding those groping hands. That didn't work. You need another way past him.",
+            },
+            {
+              aliases: ["dodge", "dodge past"],
+              targetRoomId: "corridor_3",
+              requires: { stat: "flight", min: 7 },
+              successText:
+                "You wait for a gap in his swaying and dart past on light feet, quick as anything. He doesn't even seem to notice you're gone.",
+              onSuccess: [{ type: "setFlag", flag: "caretakerEvaded", value: true }],
+              lockedText:
+                "You wait for a gap and try to dart past — but you misjudge the distance and he lurches sideways, cutting you off. You scramble back before he can grab you. Too slow. You need another way past him.",
             },
             {
               aliases: ["forward", "e"],
               targetRoomId: "corridor_3",
-              locked: true,
               requiresFlag: "caretakerEvaded",
               lockedText:
                 "You bolt for the gap past him — but he's faster than he looks. A cold, damp hand closes around your sleeve for one horrible second before you wrench free and stumble back where you started, heart slamming. He hasn't even turned around. Somehow that's worse. You need another way past him.",
+            },
+            {
+              aliases: ["back", "w", "retreat"],
+              targetRoomId: "corridor_1",
+              successText: "You back away slowly, not taking your eyes off him, and duck back the way you came.",
             },
           ],
         },

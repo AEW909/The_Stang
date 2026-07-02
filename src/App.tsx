@@ -45,7 +45,7 @@ export default function App() {
   }, []);
 
   function handleHeroComplete(profile: PlayerProfile) {
-    const initial = createInitialState(profile, campaign.initialFlags, episode);
+    const initial = createInitialState(profile, campaign.initialFlags, episode, campaign);
     saveGame(initial);
     setState(initial);
     setLines([

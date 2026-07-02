@@ -9,7 +9,7 @@ import type { GameState } from "./state";
 function newGame(): GameState {
   const stats = createBaseStats(campaign.statNames, campaign.pointBuy);
   const profile = createPlayerProfile("Harper", stats);
-  return createInitialState(profile, campaign.initialFlags, episode1);
+  return createInitialState(profile, campaign.initialFlags, episode1, campaign);
 }
 
 function run(state: GameState, ...commands: string[]): GameState {
@@ -213,14 +213,60 @@ describe("Episode 1 — caretaker evasion", () => {
     expect(retried.state.currentRoomId).toBe("corridor_3");
   });
 
-  it("succeeds via the pure command-based method (hiding in the closet)", () => {
+  it("succeeds via the pure command-based method (hiding in the closet), with real narration for his fate", () => {
     const result = processCommand(atCaretaker(), campaign, episode1, "go closet");
     expect(result.state.flags.caretakerEvaded).toBe(true);
     expect(result.state.currentRoomId).toBe("corridor_3");
+    // He shouldn't just silently vanish — the closet method needs its own success text.
+    expect(result.output.join(" ")).toMatch(/shuffle past/i);
   });
 
   it("succeeds via the item-based method (the fire extinguisher)", () => {
     const withExtinguisher = run(inCorridor1(), "take extinguisher", "go forward");
+    const result = processCommand(withExtinguisher, campaign, episode1, "use fire extinguisher");
+    expect(result.state.flags.caretakerEvaded).toBe(true);
+    expect(result.state.currentRoomId).toBe("corridor_3");
+  });
+
+  it("succeeds via a stat-gated push when Fight clears the threshold", () => {
+    const profile = createPlayerProfile("Harper", { ...createBaseStats(campaign.statNames, campaign.pointBuy), fight: 7 });
+    const state = createInitialState(profile, campaign.initialFlags, episode1, campaign);
+    const result = processCommand(run(state, "open drawer", "take key", "use key on door", "go forward"), campaign, episode1, "go push");
+    expect(result.state.flags.caretakerEvaded).toBe(true);
+    expect(result.state.currentRoomId).toBe("corridor_3");
+    expect(result.output.join(" ")).toMatch(/shoulder-check/i);
+  });
+
+  it("fails a stat-gated push when Fight doesn't clear the threshold, recoverably", () => {
+    const result = processCommand(atCaretaker(), campaign, episode1, "go push");
+    expect(result.state.flags.caretakerEvaded).toBe(false);
+    expect(result.state.currentRoomId).toBe("corridor_2");
+    expect(result.output.join(" ")).toMatch(/stronger than he looks/i);
+  });
+
+  it("succeeds via a stat-gated dodge when Flight clears the threshold", () => {
+    const profile = createPlayerProfile("Harper", { ...createBaseStats(campaign.statNames, campaign.pointBuy), flight: 7 });
+    const state = createInitialState(profile, campaign.initialFlags, episode1, campaign);
+    const result = processCommand(run(state, "open drawer", "take key", "use key on door", "go forward"), campaign, episode1, "go dodge");
+    expect(result.state.flags.caretakerEvaded).toBe(true);
+    expect(result.output.join(" ")).toMatch(/quick as anything/i);
+  });
+
+  it("fails a stat-gated dodge when Flight doesn't clear the threshold, recoverably", () => {
+    const result = processCommand(atCaretaker(), campaign, episode1, "go dodge");
+    expect(result.state.flags.caretakerEvaded).toBe(false);
+    expect(result.state.currentRoomId).toBe("corridor_2");
+    expect(result.output.join(" ")).toMatch(/misjudge the distance/i);
+  });
+
+  it("can retreat back to the locker corridor to grab the extinguisher, then return and use it", () => {
+    const retreated = processCommand(atCaretaker(), campaign, episode1, "go back");
+    expect(retreated.state.currentRoomId).toBe("corridor_1");
+    expect(retreated.output.join(" ")).toMatch(/back away slowly/i);
+
+    const withExtinguisher = run(retreated.state, "take extinguisher", "go forward");
+    expect(withExtinguisher.currentRoomId).toBe("corridor_2");
+
     const result = processCommand(withExtinguisher, campaign, episode1, "use fire extinguisher");
     expect(result.state.flags.caretakerEvaded).toBe(true);
     expect(result.state.currentRoomId).toBe("corridor_3");
@@ -232,6 +278,22 @@ describe("Episode 1 — caretaker evasion", () => {
     const restarted = restartFromCheckpoint(failed);
     expect(restarted.currentRoomId).toBe("corridor_2");
     expect(restarted.currentSceneId).toBe("the_caretaker");
+  });
+
+  it("retreating to an earlier scene does not regress the checkpoint", () => {
+    const state = atCaretaker();
+    expect(state.checkpoint.roomId).toBe("corridor_2");
+
+    const retreated = run(state, "go back");
+    expect(retreated.currentRoomId).toBe("corridor_1");
+    expect(retreated.currentSceneId).toBe("waking_up"); // tracks actual physical location
+    expect(retreated.checkpoint.roomId).toBe("corridor_2"); // but checkpoint stays put, doesn't regress
+
+    const failedAgain = run(retreated, "go forward", "go forward");
+    expect(failedAgain.currentRoomId).toBe("corridor_2");
+
+    const restarted = restartFromCheckpoint(failedAgain);
+    expect(restarted.currentRoomId).toBe("corridor_2");
   });
 });
 

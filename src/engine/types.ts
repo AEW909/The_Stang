@@ -74,7 +74,15 @@ export type EngineEffect =
   | { type: "addItem"; itemId: string }
   | { type: "removeItem"; itemId: string }
   | { type: "goTo"; roomId: string }
-  | { type: "endEpisode" };
+  | { type: "endEpisode" }
+  /** Shifts an NPC's live trust value (clamped 0-100). See docs/CAMPAIGN_BIBLE.md's NPC roster for starting values. */
+  | { type: "adjustTrust"; npcId: string; delta: number }
+  /** Shifts an NPC's live honesty value (clamped 0-100) — separate from trust; see Isabella in the campaign bible. */
+  | { type: "adjustHonesty"; npcId: string; delta: number }
+  /** Records a value-bearing choice (e.g. which friend Harper sent for help) — not a plain yes/no flag. */
+  | { type: "setDecision"; key: string; value: string }
+  | { type: "joinParty"; npcId: string }
+  | { type: "leaveParty"; npcId: string };
 
 export interface InteractableDef {
   id: string;
@@ -103,16 +111,26 @@ export interface InteractableDef {
   closeText?: string;
 }
 
+/** Deterministic gate — no dice: a flat threshold on one of Harper's stats or an
+ * NPC's live trust. Used by both dialogue choices (see DialogueChoice) and exits
+ * (see ExitDef), which apply it with different semantics — see each for details. */
+export type Requirement = { stat: StatName; min: number } | { npcId: string; minTrust: number };
+
 export interface ExitDef {
   /** Words the player can use to reach this exit: directions and/or names. */
   aliases: string[];
   targetRoomId: string;
-  locked?: boolean;
   lockedText?: string;
   /** Essential item id that unlocks this exit via USE. */
   unlocksWithItemId?: string;
   /** Flag that must be true to pass through; if false, lockedText is shown. */
   requiresFlag?: string;
+  /** Deterministic stat/trust gate (see Requirement) — unlike a dialogue choice,
+   * an exit with `requires` stays visible/attemptable either way; failing it is a
+   * real, recoverable outcome (the tension mechanic), not a hidden bonus path. */
+  requires?: Requirement;
+  /** Narration shown (before the destination room's description) when passage succeeds. */
+  successText?: string;
   /** Effects applied (in addition to moving the player) when passage succeeds. */
   onSuccess?: EngineEffect[];
 }
@@ -133,6 +151,37 @@ export interface SceneDef {
   startRoomId: string;
 }
 
+/** For dialogue specifically: a gated choice must only ever add flavour/reward
+ * (e.g. bonus trust), staying hidden until qualified — never the only way to
+ * advance a node. Every DialogueNode needs at least one unconditional choice
+ * so a gate can never block story progress (enforced by validateDialogueTree
+ * in engine/dialogue.ts). Contrast with ExitDef.requires. */
+export interface DialogueChoice {
+  id: string;
+  label: string;
+  npcResponse: string;
+  /** Omit to end the conversation after this choice. */
+  nextNodeId?: string;
+  effects?: EngineEffect[];
+  requires?: Requirement;
+}
+
+export interface DialogueNode {
+  id: string;
+  npcLine: string;
+  choices: DialogueChoice[];
+}
+
+export interface DialogueTree {
+  id: string;
+  /** Campaign NPC id this tree belongs to. */
+  npcId: string;
+  /** Which scene this tree is offered in when the player TALKs to the NPC. */
+  sceneId: string;
+  startNodeId: string;
+  nodes: DialogueNode[];
+}
+
 export interface EpisodeDef {
   id: string;
   number: number;
@@ -140,6 +189,7 @@ export interface EpisodeDef {
   prerequisites: string[];
   scenes: SceneDef[];
   items: ItemDef[];
+  dialogues: DialogueTree[];
   startSceneId: string;
   endingText: string;
 }

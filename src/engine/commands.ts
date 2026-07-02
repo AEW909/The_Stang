@@ -1,6 +1,7 @@
-import type { Campaign, EngineEffect, EpisodeDef, ExitDef, InteractableDef, ItemDef, RoomDef } from "./types";
+import type { Campaign, DialogueNode, DialogueTree, EngineEffect, EpisodeDef, ExitDef, InteractableDef, ItemDef, RoomDef } from "./types";
 import { findItem, findRoom, restartFromCheckpoint, type GameState } from "./state";
 import { parseCommand } from "./parser";
+import { availableChoices, findDialogueNode, findDialogueTree, meetsRequirement } from "./dialogue";
 
 export interface CommandResult {
   state: GameState;
@@ -82,6 +83,16 @@ function roomHasTarget(room: RoomDef, targetId: string): boolean {
   return room.exits.some((e) => e.aliases.includes(targetId)) || room.interactables.some((i) => i.id === targetId);
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function adjustNpcStat(state: GameState, npcId: string, stat: "trust" | "honesty", delta: number): GameState {
+  const current = state.npcState[npcId] ?? { trust: 0, honesty: 0 };
+  const updated = { ...current, [stat]: clamp(current[stat] + delta, 0, 100) };
+  return { ...state, npcState: { ...state.npcState, [npcId]: updated } };
+}
+
 function applyEffects(state: GameState, episode: EpisodeDef, effects: EngineEffect[]): CommandResult {
   let next = state;
   const output: string[] = [];
@@ -105,25 +116,59 @@ function applyEffects(state: GameState, episode: EpisodeDef, effects: EngineEffe
         next = { ...next, ended: true };
         output.push(episode.endingText);
         break;
+      case "adjustTrust":
+        next = adjustNpcStat(next, effect.npcId, "trust", effect.delta);
+        break;
+      case "adjustHonesty":
+        next = adjustNpcStat(next, effect.npcId, "honesty", effect.delta);
+        break;
+      case "setDecision":
+        next = { ...next, decisions: { ...next.decisions, [effect.key]: effect.value } };
+        break;
+      case "joinParty":
+        if (!next.party.includes(effect.npcId)) {
+          next = { ...next, party: [...next.party, effect.npcId] };
+        }
+        break;
+      case "leaveParty":
+        next = { ...next, party: next.party.filter((id) => id !== effect.npcId) };
+        break;
     }
   }
   return { state: next, output };
 }
 
+function sceneIndex(episode: EpisodeDef, sceneId: string): number {
+  return episode.scenes.findIndex((s) => s.id === sceneId);
+}
+
 /** Checkpoints save at the end of every scene: whenever the current room's
- * scene differs from the tracked scene, we've just crossed a scene boundary. */
+ * scene differs from the tracked scene, we've just crossed a scene boundary.
+ * Some rooms (e.g. a retreat exit back to an earlier corridor) let the player
+ * physically re-enter an earlier scene — currentSceneId always tracks the
+ * room they're actually standing in (scene-scoped content like flavour item
+ * outcomes depends on that being accurate), but the checkpoint itself must
+ * only ever advance forward, never regress just because the player backtracked. */
 function syncSceneAndCheckpoint(state: GameState, episode: EpisodeDef): GameState {
   const { scene } = findRoom(episode, state.currentRoomId);
   if (scene.id === state.currentSceneId) return state;
+  const next: GameState = { ...state, currentSceneId: scene.id };
+
+  if (sceneIndex(episode, scene.id) <= sceneIndex(episode, state.checkpoint.sceneId)) {
+    return next;
+  }
+
   return {
-    ...state,
-    currentSceneId: scene.id,
+    ...next,
     checkpoint: {
       sceneId: scene.id,
       roomId: state.currentRoomId,
       inventory: [...state.inventory],
       flags: { ...state.flags },
       openState: { ...state.openState },
+      npcState: { ...state.npcState },
+      decisions: { ...state.decisions },
+      party: [...state.party],
     },
   };
 }
@@ -156,32 +201,45 @@ function describeRoom(state: GameState, episode: EpisodeDef): string[] {
   return lines;
 }
 
+/** An exit's gate conditions are mutually exclusive per exit — each one
+ * represents a single method of getting through. `requires` differs from
+ * `requiresFlag`/`unlocksWithItemId` in spirit (see ExitDef) but is checked
+ * the same deterministic way. */
+function isExitPassable(state: GameState, exit: ExitDef): boolean {
+  if (exit.unlocksWithItemId) return state.inventory.includes(exit.unlocksWithItemId);
+  if (exit.requiresFlag) return !!state.flags[exit.requiresFlag];
+  if (exit.requires) return meetsRequirement(state, exit.requires);
+  return true;
+}
+
+function moveThroughExit(state: GameState, episode: EpisodeDef, exit: ExitDef, extraOutput: string[] = []): CommandResult {
+  let next: GameState = { ...state, currentRoomId: exit.targetRoomId };
+  const output = [...extraOutput];
+  if (exit.successText) output.push(exit.successText);
+  if (exit.onSuccess) {
+    const applied = applyEffects(next, episode, exit.onSuccess);
+    next = applied.state;
+    output.push(...applied.output);
+  }
+  return { state: next, output: [...output, ...describeRoom(next, episode)] };
+}
+
 function resolveGo(state: GameState, episode: EpisodeDef, target: string): CommandResult {
   const { room } = findRoom(episode, state.currentRoomId);
   const exit = findExit(room, target);
   if (!exit) return { state, output: ["You can't go that way."] };
 
-  const passable = !exit.locked || (exit.requiresFlag && state.flags[exit.requiresFlag]);
-
-  if (passable) {
-    let next: GameState = { ...state, currentRoomId: exit.targetRoomId };
-    let output: string[] = [];
-    if (exit.onSuccess) {
-      const applied = applyEffects(next, episode, exit.onSuccess);
-      next = applied.state;
-      output = applied.output;
-    }
-    return { state: next, output: [...output, ...describeRoom(next, episode)] };
+  if (!isExitPassable(state, exit)) {
+    return { state, output: [exit.lockedText ?? "That's locked."] };
   }
 
-  if (exit.unlocksWithItemId && state.inventory.includes(exit.unlocksWithItemId)) {
+  if (exit.unlocksWithItemId) {
     const item = findItem(episode, exit.unlocksWithItemId);
-    const next: GameState = { ...state, currentRoomId: exit.targetRoomId };
     const unlockLine = item.essentialUse?.result ?? "You unlock it and go through.";
-    return { state: next, output: [unlockLine, ...describeRoom(next, episode)] };
+    return moveThroughExit(state, episode, exit, [unlockLine]);
   }
 
-  return { state, output: [exit.lockedText ?? "That's locked."] };
+  return moveThroughExit(state, episode, exit);
 }
 
 function resolveExamine(state: GameState, episode: EpisodeDef, target: string): CommandResult {
@@ -202,8 +260,7 @@ function resolveExamine(state: GameState, episode: EpisodeDef, target: string): 
   if (inventoryItem) return { state, output: [inventoryItem.description] };
   const exit = findExit(room, target);
   if (exit) {
-    const passable = !exit.locked || (exit.requiresFlag && state.flags[exit.requiresFlag]);
-    if (!passable) return { state, output: [exit.lockedText ?? "It's locked."] };
+    if (!isExitPassable(state, exit)) return { state, output: [exit.lockedText ?? "It's locked."] };
     return { state, output: ["That's the way through."] };
   }
   return { state, output: [`You don't see "${target}" here.`] };
@@ -281,14 +338,73 @@ function resolveUse(state: GameState, episode: EpisodeDef, targetRaw: string, se
   return { state, output: [item.fallbackUseText ?? "Nothing interesting happens."] };
 }
 
+function describeDialogueNode(state: GameState, node: DialogueNode): string[] {
+  const lines = [node.npcLine];
+  availableChoices(state, node).forEach((choice, i) => lines.push(`${i + 1}. ${choice.label}`));
+  return lines;
+}
+
+function enterDialogue(state: GameState, tree: DialogueTree): CommandResult {
+  const node = findDialogueNode(tree, tree.startNodeId);
+  const next: GameState = { ...state, activeDialogue: { treeId: tree.id, nodeId: node.id } };
+  return { state: next, output: describeDialogueNode(state, node) };
+}
+
 function resolveTalk(state: GameState, campaign: Campaign, episode: EpisodeDef, target: string | undefined): CommandResult {
-  const { room } = findRoom(episode, state.currentRoomId);
-  const npcPresent = room.interactables.find((i) => campaign.npcs[i.id]);
+  const { room, scene } = findRoom(episode, state.currentRoomId);
+  const npcsPresent = room.interactables.filter((i) => campaign.npcs[i.id]);
+  if (npcsPresent.length === 0) return { state, output: ["There's no one here to talk to."] };
+
+  const npcPresent = target ? npcsPresent.find((i) => matchesName(i.name, i.id, target)) : npcsPresent[0];
   if (!npcPresent) return { state, output: ["There's no one here to talk to."] };
-  if (target && !matchesName(npcPresent.name, npcPresent.id, target)) {
-    return { state, output: ["There's no one here to talk to."] };
+
+  const tree = episode.dialogues.find((d) => d.npcId === npcPresent.id && d.sceneId === scene.id);
+  if (!tree) {
+    return { state, output: [`This really doesn't seem like the moment to talk to ${npcPresent.name}.`] };
   }
-  return { state, output: [`This really doesn't seem like the moment to talk to ${npcPresent.name}.`] };
+  return enterDialogue(state, tree);
+}
+
+/** While a conversation is active, input is a numbered choice, not a parsed
+ * command — dialogue is menu-driven by design (see docs/SLICE1_HANDOFF.md
+ * Conventions). `restart` and `help` remain available as safety valves. */
+function handleDialogueInput(state: GameState, episode: EpisodeDef, raw: string): CommandResult {
+  const trimmed = raw.trim().toLowerCase();
+
+  if (trimmed === "restart") {
+    const next = restartFromCheckpoint(state);
+    return {
+      state: next,
+      output: ["You come back to yourself, right where you last caught your breath.", ...describeRoom(next, episode)],
+    };
+  }
+  if (trimmed === "help" || trimmed === "?") {
+    return { state, output: ["You're in the middle of a conversation. Type the number of the option you want."] };
+  }
+
+  const activeDialogue = state.activeDialogue!;
+  const tree = findDialogueTree(episode, activeDialogue.treeId);
+  const node = findDialogueNode(tree, activeDialogue.nodeId);
+  const choices = availableChoices(state, node);
+  const index = Number.parseInt(trimmed, 10);
+  const choice = Number.isInteger(index) ? choices[index - 1] : undefined;
+  if (!choice) {
+    return { state, output: ["Type the number of one of the choices below."] };
+  }
+
+  const applied = applyEffects(state, episode, choice.effects ?? []);
+  let next = applied.state;
+  const output = [choice.npcResponse, ...applied.output];
+
+  if (choice.nextNodeId) {
+    const nextNode = findDialogueNode(tree, choice.nextNodeId);
+    next = { ...next, activeDialogue: { treeId: tree.id, nodeId: nextNode.id } };
+    output.push(...describeDialogueNode(next, nextNode));
+  } else {
+    next = { ...next, activeDialogue: null };
+  }
+
+  return { state: next, output };
 }
 
 function describeInventory(state: GameState, episode: EpisodeDef): string[] {
@@ -314,6 +430,11 @@ function describeMap(state: GameState, episode: EpisodeDef): string[] {
 
 export function getSuggestions(state: GameState, episode: EpisodeDef): string[] {
   if (state.ended) return ["restart"];
+  if (state.activeDialogue) {
+    const tree = findDialogueTree(episode, state.activeDialogue.treeId);
+    const node = findDialogueNode(tree, state.activeDialogue.nodeId);
+    return availableChoices(state, node).map((choice, i) => `${i + 1}. ${choice.label}`);
+  }
   const { room } = findRoom(episode, state.currentRoomId);
   const suggestions: string[] = [];
   for (const exit of room.exits) suggestions.push(`go ${exit.aliases[0]}`);
@@ -340,6 +461,12 @@ export function processCommand(
       state,
       output: ["The episode has ended. Type RESTART to replay from your last checkpoint."],
     };
+  }
+
+  if (state.activeDialogue) {
+    const dialogueResult = handleDialogueInput(state, episode, raw);
+    const finalState = syncSceneAndCheckpoint(dialogueResult.state, episode);
+    return { state: finalState, output: dialogueResult.output };
   }
 
   const cmd = parseCommand(raw);

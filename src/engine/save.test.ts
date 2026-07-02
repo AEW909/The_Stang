@@ -20,7 +20,7 @@ describe("save/load", () => {
     const storage = createMemoryStorage();
     const stats = createBaseStats(campaign.statNames, campaign.pointBuy);
     const profile = createPlayerProfile("Harper", stats);
-    const state = createInitialState(profile, campaign.initialFlags, episode1);
+    const state = createInitialState(profile, campaign.initialFlags, episode1, campaign);
 
     saveGame(state, storage);
     const loaded = loadGame(storage);
@@ -33,7 +33,7 @@ describe("save/load", () => {
     const stats = createBaseStats(campaign.statNames, campaign.pointBuy);
     stats.bravery = 8;
     const profile = createPlayerProfile("Harper", stats);
-    let state = createInitialState(profile, campaign.initialFlags, episode1);
+    let state = createInitialState(profile, campaign.initialFlags, episode1, campaign);
     state = processCommand(state, campaign, episode1, "open drawer").state;
     state = processCommand(state, campaign, episode1, "take key").state;
     state = processCommand(state, campaign, episode1, "use key on door").state;
@@ -61,7 +61,7 @@ describe("save/load", () => {
     const storage = createMemoryStorage();
     const stats = createBaseStats(campaign.statNames, campaign.pointBuy);
     const profile = createPlayerProfile("Harper", stats);
-    const state = createInitialState(profile, campaign.initialFlags, episode1);
+    const state = createInitialState(profile, campaign.initialFlags, episode1, campaign);
     saveGame(state, storage);
     clearSave(storage);
     expect(loadGame(storage)).toBeNull();

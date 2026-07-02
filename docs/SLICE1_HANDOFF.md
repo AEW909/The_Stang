@@ -6,23 +6,24 @@
 
 ---
 
-## 0. Status: Slice 1 shipped
+## 0. Status: Slice 1 shipped, Slice 2 engine core built
 
-**Slice 1 is complete, verified, and considered fully shippable as of 2026-07-01.** All acceptance criteria in Section 5 pass (54 Vitest tests, clean `tsc`, full manual playthrough including reload-resume, evasion failure + `restart`, and the flavour-item fallback). Pushed to `main` on the `AEW909/The_Stang` GitHub repo. First real playtest with the intended player is planned for 2026-07-02, with feedback to follow.
+**Slice 1 is complete, verified, and shippable as of 2026-07-01.** All acceptance criteria in Section 5 passed (initially 54 Vitest tests, now 73 after later additions — see below), clean `tsc`, full manual playthrough including reload-resume, evasion failure + `restart`, and the flavour-item fallback. Pushed to `main` on the `AEW909/The_Stang` GitHub repo.
 
 Two decision points this document originally left open were resolved during the build and are now locked:
 - **Hero-creator point-buy:** base 3 / pool 10 / max 8 per stat (min 3, can't go lower). Confirmed as a good balance — "at 8 points, each upgrade is a meaningful increase in ability."
 - **Episode 1 scene/checkpoint breakdown:** five scenes — Waking Up, The Caretaker, Escape the School, The Quiet Walk Home, Home — each its own checkpoint boundary. See Section 5 for the original reasoning.
 
-Two things were added on top of the original Slice 1 scope, at the project owner's request, and are now part of the standing engine contract (see Section 3):
+Additions on top of the original Slice 1 scope, at the project owner's request, now part of the standing engine contract (see Section 3):
 - **`open`/`close` (+ `shut`) verbs**, for containers with real, persisted, checkpointed open/closed state.
-- **Deterministic room descriptions** — a room's authored `description` never names an ordinary prop directly; `look` auto-appends a "You can also see" line from whichever interactables are currently revealed and not yet taken. This replaced hand-assembling CAPS mentions into room prose, to stop room text and room data from drifting apart as more episodes get added.
+- **Deterministic room descriptions** — a room's authored `description` never names an ordinary prop directly; `look` auto-appends a "You can also see" line from whichever interactables are currently revealed and not yet taken.
+- **The caretaker evasion was redesigned** after first playtest feedback that hiding in the closet made him silently vanish with no payoff. It's now a genuine choice moment: `go closet` (always succeeds, now with real narration), `go push` (Fight ≥ 7), `go dodge` (Flight ≥ 7) — both deterministic, no dice, and both fail recoverably with distinct scares if the stat isn't there — plus a new `go back` retreat to the locker corridor so a failed attempt can go grab the fire extinguisher and return. This is also where `ExitDef.requires` and `ExitDef.successText` were added (see Section 3), and where a real bug was caught and fixed: allowing backward travel into an earlier scene could have let a checkpoint **regress** — fixed so checkpoints only ever advance forward, never backward, regardless of which way the player physically walks.
+
+**Slice 2's engine core (dialogue, live trust/honesty, decisions, party) is built and tested, but Episode 2 content has not been written.** See Section 5 update below.
 
 A `?reset` URL query param (undocumented in the UI, see `src/App.tsx`) wipes the `localStorage` save on load, for the project owner to clear their own testing progress before handing the game to its actual player.
 
 Camille's note (`data/episodes/episode1.ts`, `hallway` room) is still placeholder text, flagged in the file for the project owner to hand-write.
-
-Slice 2 (dialogue, NPC introductions, trust/honesty, Episode 2) is sketched only — not started.
 
 ---
 
@@ -62,9 +63,16 @@ Slice 2 (dialogue, NPC introductions, trust/honesty, Episode 2) is sketched only
 - **Parser vocabulary stays constrained and visible.** Core verbs: `go`/`n`/`s`/`e`/`w`, `look`/`l`, `examine`/`x`, `inventory`/`i`, `take`, `drop`, `use`, `open`, `close`/`shut`, `talk`, `health`, `map`, `restart`, `help`/`/?`. Interactable objects are shown in CAPS in room descriptions. A suggestions bar above the input shows contextually relevant commands for the current scene. This matches the tone established by the original prototype and should carry through.
 - **Room descriptions are deterministic, not hand-assembled.** A room's `description` is fixed atmosphere/exit/NPC text only — it never names an ordinary prop directly. Every prop gets a `shortDescription`; `look` auto-appends a "You can also see" line built from whichever interactables are currently revealed (not hidden inside a closed container) and not yet taken (checked against inventory, no separate "taken" bookkeeping needed). An interactable can opt out via `excludeFromList` for NPCs and plot-critical objects that deserve full prose instead of a bullet. This is a core engine contract (see `describeRoom` in `engine/commands.ts`), not a per-episode formatting choice — it exists so room text and room data can never silently drift out of sync as more episodes are added.
 - **Containers use `open`/`close`, not `examine`, to reveal what's inside.** An interactable marked `containedIn: <containerId>` is invisible to `look`/`examine`/`take` until that container is opened; opening/closing is real, persisted, checkpointed state (`GameState.openState`), not a one-way flag. This is how "Harper opens a drawer/cupboard and something new becomes visible" is meant to be authored going forward.
-- **Dialogue and combat are menu-driven** (numbered choices), not parsed free text — this is a deliberate departure from exploration, made because both need precise branching and stat-checking logic that free text can't support reliably.
+- **Checkpoints save at the end of every scene**, not just at episode boundaries. Death/failure states restart from the most recent scene checkpoint, not the start of the episode. **Checkpoints only ever advance forward** — if a room lets the player physically backtrack into an earlier scene (e.g. a retreat exit), `currentSceneId` follows their real location (scene-scoped content like flavour-item outcomes depends on that being accurate), but the checkpoint itself is never overwritten with an earlier scene. See `syncSceneAndCheckpoint` in `engine/commands.ts`.
+- **Deterministic stat/trust gates ("Fallout-style, no dice")** come in two flavours with different rules, both using the shared `Requirement` type (`{stat, min}` or `{npcId, minTrust}`):
+  - **Dialogue choices** (`DialogueChoice.requires`): the gated choice is *hidden* until qualified, and must only ever be a bonus/reward path — every `DialogueNode` needs at least one unconditional choice, enforced by `validateDialogueTree` (see `engine/dialogue.ts`), so a gate can never block a conversation.
+  - **Exits** (`ExitDef.requires`): the opposite — the option stays visible/attemptable regardless of the player's stats, and failing it is a real, recoverable outcome (the tension mechanic for things like the caretaker evasion), not a hidden path. An exit's `successText` narrates what happens on success, separate from the destination room's own description — added specifically so a successful evasion method (e.g. hiding in a closet) explains what happened to the threat, rather than it silently vanishing.
+- **Dialogue is menu-driven** (numbered choices), not parsed free text — a deliberate departure from exploration. While a conversation is active (`GameState.activeDialogue`), input is a choice number, not a parsed command; `help`/`restart` remain available as safety valves. `talk <npc>` starts the NPC's dialogue tree for the current scene if one exists, else falls back to a generic in-character line.
+- **NPC trust/honesty are live, not flavour text.** `GameState.npcState` is seeded from `campaign.ts`'s starting values and mutated via `adjustTrust`/`adjustHonesty` effects (clamped 0–100), the same way dialogue and other content already reference effects.
+- **Decisions vs. flags:** plain yes/no facts stay in the existing `flags` (`StoryFlags`, boolean); a choice with a *value* (e.g. which friend Harper sent for help) goes in `GameState.decisions` (`Record<string, string>`) via the `setDecision` effect instead of being force-fit into a boolean.
+- **Party membership** (`GameState.party`, `joinParty`/`leaveParty` effects) tracks which NPCs are currently with Harper. Available from Slice 2 onward for scene/dialogue text to reference; Slice 3's combat is expected to consume it too once built.
+- **Combat is menu-driven** (numbered choices), not parsed free text — same reasoning as dialogue.
 - **Items are explicitly tagged `essential` or `flavour` in their data definition.** Essential items have exactly one valid use and cannot be repurposed. Flavour items may have 0–4 hand-authored scene-specific `USE` outcomes; any `USE` attempt not specifically authored for the current scene must return a graceful, in-character non-broken fallback (never a generic error). This tagging and the fallback behavior are core engine contracts, not per-episode afterthoughts — build them into the engine from Slice 1 even though Episode 1 will only lightly exercise them.
-- **Checkpoints save at the end of every scene**, not just at episode boundaries. Death/failure states restart from the most recent scene checkpoint, not the start of the episode.
 - **File/folder naming:** lowercase-kebab or camelCase consistent with the language convention already implied by TS/React tooling (component files PascalCase, logic/data files camelCase) — pick one standard in the first commit and hold it for the whole project.
 
 ---
