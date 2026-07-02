@@ -53,7 +53,7 @@ export const episode1: EpisodeDef = {
         {
           sceneId: "waking_up",
           result:
-            "You give it an experimental squeeze. A little puff of white dust startles a spider off the noticeboard. Rude, but effective, you suppose.",
+            "You give it an experimental squeeze. A little puff of white dust drifts out and something small skitters for cover nearby. Rude, but effective, you suppose.",
         },
         {
           sceneId: "the_caretaker",

@@ -26,8 +26,16 @@ const HELP_TEXT = [
   "  help / ?             - show this list",
 ].join("\n");
 
+/** Strips a leading article so "the desk"/"a key"/"an extinguisher" match the
+ * same way the bare noun would — natural phrasing for a young player, and it
+ * costs nothing since no interactable/item/exit alias in this game starts
+ * with "the"/"a"/"an" as its own word. */
+function stripLeadingArticle(s: string): string {
+  return s.replace(/^(the|an?)\s+/, "");
+}
+
 function normalize(s: string): string {
-  return s.trim().toLowerCase();
+  return stripLeadingArticle(s.trim().toLowerCase());
 }
 
 function matchesName(name: string, id: string, input: string): boolean {
@@ -236,7 +244,11 @@ function resolveGo(state: GameState, episode: EpisodeDef, target: string): Comma
   if (exit.unlocksWithItemId) {
     const item = findItem(episode, exit.unlocksWithItemId);
     const unlockLine = item.essentialUse?.result ?? "You unlock it and go through.";
-    return moveThroughExit(state, episode, exit, [unlockLine]);
+    // Apply the item's own effects here too, not just its text — otherwise an
+    // essential item's essentialUse.effects would only ever fire via the
+    // explicit "use" verb, silently diverging from this auto-unlock shortcut.
+    const applied = applyEffects(state, episode, item.essentialUse?.effects ?? []);
+    return moveThroughExit(applied.state, episode, exit, [unlockLine, ...applied.output]);
   }
 
   return moveThroughExit(state, episode, exit);
@@ -476,9 +488,17 @@ export function processCommand(
     case "empty":
       result = { state, output: [] };
       break;
-    case "unknown":
-      result = { state, output: [`I don't understand "${cmd.raw}". Type HELP for the list of commands.`] };
+    case "unknown": {
+      // A bare word that happens to name one of this room's exits (e.g. "push",
+      // "dodge", "hide", "closet", "back") is treated as "go <word>" — those
+      // words are exactly what the suggestions bar surfaces, so a player
+      // shouldn't have to remember to prefix them with "go".
+      const { room } = findRoom(episode, state.currentRoomId);
+      result = findExit(room, cmd.raw)
+        ? resolveGo(state, episode, cmd.raw)
+        : { state, output: [`I don't understand "${cmd.raw}". Type HELP for the list of commands.`] };
       break;
+    }
     case "help":
       result = { state, output: [HELP_TEXT] };
       break;

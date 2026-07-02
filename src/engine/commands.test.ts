@@ -169,7 +169,7 @@ describe("Episode 1 — flavour item contract", () => {
   it("gives a different authored outcome for the same item back in scene 1", () => {
     const state = run(inCorridor1(), "take extinguisher");
     const used = processCommand(state, campaign, episode1, "use extinguisher");
-    expect(used.output.join(" ")).toMatch(/spider/i);
+    expect(used.output.join(" ")).toMatch(/skitters for cover/i);
   });
 
   it("falls back gracefully for a flavour item with no authored outcome anywhere", () => {
@@ -409,5 +409,59 @@ describe("Episode 1 — misc engine behaviour", () => {
   it("health reports the player's stats", () => {
     const result = processCommand(newGame(), campaign, episode1, "health");
     expect(result.output.join(" ")).toMatch(/Bravery/);
+  });
+});
+
+describe("Episode 1 — natural phrasing with articles", () => {
+  it("matches interactables, items, and exits when the player types 'the'/'a'/'an'", () => {
+    expect(processCommand(newGame(), campaign, episode1, "examine the desk").output.join(" ")).toMatch(/Mrs Reeves/i);
+
+    const opened = processCommand(newGame(), campaign, episode1, "open the drawer");
+    expect(opened.output.join(" ")).toMatch(/glints inside/i);
+
+    const withKey = processCommand(opened.state, campaign, episode1, "take the key");
+    expect(withKey.state.inventory).toContain("spare_key");
+
+    const unlocked = processCommand(withKey.state, campaign, episode1, "use the key on the door");
+    expect(unlocked.state.currentRoomId).toBe("corridor_1");
+  });
+
+  it("a bare 'go the door' also resolves the exit correctly", () => {
+    const withKey = run(newGame(), "open drawer", "take key");
+    const result = processCommand(withKey, campaign, episode1, "go the door");
+    expect(result.state.currentRoomId).toBe("corridor_1");
+  });
+});
+
+describe("Episode 1 — bare exit-alias fallback", () => {
+  it("treats an unrecognised bare word as 'go <word>' when it names a current exit", () => {
+    const result = processCommand(atCaretaker(), campaign, episode1, "back");
+    expect(result.state.currentRoomId).toBe("corridor_1");
+    expect(result.output.join(" ")).toMatch(/back away slowly/i);
+  });
+
+  it("still gives the normal unknown-command message for anything that isn't an exit", () => {
+    const result = processCommand(atCaretaker(), campaign, episode1, "dance");
+    expect(result.output.join(" ")).toMatch(/don't understand/i);
+  });
+});
+
+describe("Episode 1 — engine contract fixes", () => {
+  it("the essential item's effects fire consistently whether unlocked via USE or auto-unlocked via GO", () => {
+    // Both paths should land in the same place with the same inventory/flags —
+    // previously only the explicit USE path ran essentialUse.effects.
+    const viaUse = run(newGame(), "open drawer", "take key", "use key on door");
+    const viaGo = run(newGame(), "open drawer", "take key", "go door");
+    expect(viaGo.currentRoomId).toBe(viaUse.currentRoomId);
+    expect(viaGo.inventory).toEqual(viaUse.inventory);
+  });
+
+  it("the fire extinguisher's scene-1 flavour text no longer references a room-specific fixture", () => {
+    // It's usable from either room in the "waking_up" scene (classroom or corridor_1),
+    // so its joke text must not name something that only exists in one of them.
+    const inClassroom = run(inCorridor1(), "take extinguisher", "go back");
+    expect(inClassroom.currentRoomId).toBe("classroom");
+    const result = processCommand(inClassroom, campaign, episode1, "use extinguisher");
+    expect(result.output.join(" ")).not.toMatch(/noticeboard/i);
   });
 });
