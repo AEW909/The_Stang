@@ -27,6 +27,8 @@ const VERB_ALIASES: Record<string, string> = {
   s: "go",
   e: "go",
   w: "go",
+  walk: "go",
+  run: "go",
   look: "look",
   l: "look",
   examine: "examine",
@@ -35,6 +37,7 @@ const VERB_ALIASES: Record<string, string> = {
   i: "inventory",
   take: "take",
   get: "take",
+  grab: "take",
   drop: "drop",
   use: "use",
   open: "open",
@@ -68,8 +71,12 @@ export function parseCommand(raw: string): ParsedCommand {
   switch (canonicalVerb) {
     case "go":
       return rest ? { verb: "go", target: rest } : { verb: "unknown", raw: trimmed };
-    case "look":
-      return { verb: "look" };
+    case "look": {
+      // "look" alone describes the room; "look at X" / "look X" is a synonym for "examine X".
+      if (!rest) return { verb: "look" };
+      const target = rest.startsWith("at ") ? rest.slice(3).trim() : rest;
+      return target ? { verb: "examine", target } : { verb: "look" };
+    }
     case "examine":
       return rest ? { verb: "examine", target: rest } : { verb: "unknown", raw: trimmed };
     case "inventory":

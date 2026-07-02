@@ -180,19 +180,28 @@ describe("Episode 1 — flavour item contract", () => {
   });
 
   it("falls back gracefully for the extinguisher once outside its authored scenes", () => {
+    // Evade via the closet here (not the extinguisher) so it's still in inventory to test with.
     const state = run(
       inCorridor1(),
       "take extinguisher",
       "go forward",
-      "use fire extinguisher",
+      "go closet",
       "go forward",
       "go forward",
       "go forward",
     );
     // Now in high_street_room, an unauthored scene for this item.
     expect(state.currentRoomId).toBe("high_street_room");
+    expect(state.inventory).toContain("fire_extinguisher");
     const used = processCommand(state, campaign, episode1, "use extinguisher");
     expect(used.output.join(" ")).toMatch(/fire drill/i);
+  });
+
+  it("consumes the fire extinguisher once it's used on the caretaker", () => {
+    const state = run(inCorridor1(), "take extinguisher", "go forward");
+    expect(state.inventory).toContain("fire_extinguisher");
+    const used = processCommand(state, campaign, episode1, "use fire extinguisher");
+    expect(used.state.inventory).not.toContain("fire_extinguisher");
   });
 });
 
@@ -430,6 +439,44 @@ describe("Episode 1 — natural phrasing with articles", () => {
     const withKey = run(newGame(), "open drawer", "take key");
     const result = processCommand(withKey, campaign, episode1, "go the door");
     expect(result.state.currentRoomId).toBe("corridor_1");
+  });
+
+  it("strips leading prepositions too, including combinations with articles", () => {
+    const withKey = run(newGame(), "open drawer", "take key");
+    expect(processCommand(withKey, campaign, episode1, "go through the door").state.currentRoomId).toBe("corridor_1");
+
+    const atClosetDoor = atCaretaker();
+    const result = processCommand(atClosetDoor, campaign, episode1, "go into the closet");
+    expect(result.state.currentRoomId).toBe("corridor_3");
+  });
+
+  it("supports walk/run/grab and 'look at X' as natural synonyms", () => {
+    expect(processCommand(newGame(), campaign, episode1, "look at the desk").output.join(" ")).toMatch(/Mrs Reeves/i);
+    const opened = run(newGame(), "open drawer");
+    const grabbed = processCommand(opened, campaign, episode1, "grab the key");
+    expect(grabbed.state.inventory).toContain("spare_key");
+    const walked = processCommand(grabbed.state, campaign, episode1, "walk through the door");
+    expect(walked.state.currentRoomId).toBe("corridor_1");
+  });
+});
+
+describe("Episode 1 — unlock narration only plays once", () => {
+  it("shows the key's unlock line the first time, but not on later passes through the same door", () => {
+    const first = processCommand(run(newGame(), "open drawer", "take key"), campaign, episode1, "go door");
+    expect(first.output.join(" ")).toMatch(/satisfying clunk/i);
+
+    const back = processCommand(first.state, campaign, episode1, "go back");
+    const second = processCommand(back.state, campaign, episode1, "go door");
+    expect(second.output.join(" ")).not.toMatch(/satisfying clunk/i);
+    expect(second.state.currentRoomId).toBe("corridor_1");
+  });
+
+  it("still applies the item's effects on repeat passes even without the narration", () => {
+    const first = run(newGame(), "open drawer", "take key", "go door");
+    const back = run(first, "go back");
+    const second = processCommand(back, campaign, episode1, "use key on door");
+    // essentialUse.effects (goTo corridor_1) should still fire via the explicit USE path regardless.
+    expect(second.state.currentRoomId).toBe("corridor_1");
   });
 });
 

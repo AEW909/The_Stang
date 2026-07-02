@@ -58,9 +58,10 @@ export const episode1: EpisodeDef = {
         {
           sceneId: "the_caretaker",
           result:
-            "You heave the extinguisher up and pull the pin. It goes off with a roar, smothering the corridor in a choking white cloud. The caretaker lets out a groan like a dying vacuum cleaner and staggers sideways, clawing at the air. You don't wait to see what happens next — you run.",
+            "You heave the extinguisher up and pull the pin. It goes off with a roar, smothering the corridor in a choking white cloud, empty in seconds. The caretaker lets out a groan like a dying vacuum cleaner and staggers sideways, clawing at the air. You don't wait to see what happens next — you drop the spent canister and run.",
           effects: [
             { type: "setFlag", flag: "caretakerEvaded", value: true },
+            { type: "removeItem", itemId: "fire_extinguisher" },
             { type: "goTo", roomId: "corridor_3" },
           ],
         },

@@ -64,4 +64,16 @@ describe("parseCommand", () => {
     expect(parseCommand("go")).toEqual({ verb: "unknown", raw: "go" });
     expect(parseCommand("take")).toEqual({ verb: "unknown", raw: "take" });
   });
+
+  it("parses walk/run as go, and grab as take", () => {
+    expect(parseCommand("walk door")).toEqual({ verb: "go", target: "door" });
+    expect(parseCommand("run door")).toEqual({ verb: "go", target: "door" });
+    expect(parseCommand("grab key")).toEqual({ verb: "take", target: "key" });
+  });
+
+  it("parses 'look at X' and bare 'look X' as examine, but 'look' alone as look", () => {
+    expect(parseCommand("look")).toEqual({ verb: "look" });
+    expect(parseCommand("look at desk")).toEqual({ verb: "examine", target: "desk" });
+    expect(parseCommand("look desk")).toEqual({ verb: "examine", target: "desk" });
+  });
 });

@@ -26,16 +26,25 @@ const HELP_TEXT = [
   "  help / ?             - show this list",
 ].join("\n");
 
-/** Strips a leading article so "the desk"/"a key"/"an extinguisher" match the
- * same way the bare noun would — natural phrasing for a young player, and it
- * costs nothing since no interactable/item/exit alias in this game starts
- * with "the"/"a"/"an" as its own word. */
-function stripLeadingArticle(s: string): string {
-  return s.replace(/^(the|an?)\s+/, "");
+/** Words a young player will naturally include but that carry no matching
+ * meaning of their own ("go into the closet", "walk to the door", "take the
+ * key"). Strips them one at a time from the front so combinations like "into
+ * the closet" reduce all the way to "closet". Always leaves at least one word,
+ * so a target that's *only* filler words still fails to match rather than
+ * silently matching everything. Costs nothing: no interactable/item/exit
+ * alias in this game starts with one of these words. */
+const LEADING_FILLER_WORDS = new Set(["the", "a", "an", "into", "through", "to", "towards"]);
+
+function stripLeadingFillers(s: string): string {
+  const tokens = s.split(/\s+/);
+  while (tokens.length > 1 && LEADING_FILLER_WORDS.has(tokens[0])) {
+    tokens.shift();
+  }
+  return tokens.join(" ");
 }
 
 function normalize(s: string): string {
-  return stripLeadingArticle(s.trim().toLowerCase());
+  return stripLeadingFillers(s.trim().toLowerCase());
 }
 
 function matchesName(name: string, id: string, input: string): boolean {
@@ -53,6 +62,12 @@ function matchesToken(token: string, input: string): boolean {
 /** Open/closed state is keyed by "roomId:interactableId" in GameState.openState. */
 function openKey(roomId: string, interactableId: string): string {
   return `${roomId}:${interactableId}`;
+}
+
+/** Distinct namespace from openKey so an exit's "already unlocked" flag can
+ * never collide with an interactable's open/closed state. */
+function exitUnlockKey(roomId: string, exit: ExitDef): string {
+  return `exit:${roomId}:${exit.aliases[0]}`;
 }
 
 function isOpen(state: GameState, room: RoomDef, interactable: InteractableDef): boolean {
@@ -243,12 +258,25 @@ function resolveGo(state: GameState, episode: EpisodeDef, target: string): Comma
 
   if (exit.unlocksWithItemId) {
     const item = findItem(episode, exit.unlocksWithItemId);
-    const unlockLine = item.essentialUse?.result ?? "You unlock it and go through.";
     // Apply the item's own effects here too, not just its text — otherwise an
     // essential item's essentialUse.effects would only ever fire via the
     // explicit "use" verb, silently diverging from this auto-unlock shortcut.
     const applied = applyEffects(state, episode, item.essentialUse?.effects ?? []);
-    return moveThroughExit(applied.state, episode, exit, [unlockLine, ...applied.output]);
+
+    // Only narrate the unlock once — walking back through an already-unlocked
+    // door repeatedly shouldn't replay "the key turns with a satisfying clunk"
+    // every single time. Reuses the openState map (any per-room boolean, not
+    // just interactables) rather than adding a new piece of GameState.
+    const key = exitUnlockKey(room.id, exit);
+    const alreadyUnlocked = !!state.openState[key];
+    let next = applied.state;
+    const extra = [...applied.output];
+    if (!alreadyUnlocked) {
+      next = { ...next, openState: { ...next.openState, [key]: true } };
+      extra.unshift(item.essentialUse?.result ?? "You unlock it and go through.");
+    }
+
+    return moveThroughExit(next, episode, exit, extra);
   }
 
   return moveThroughExit(state, episode, exit);
