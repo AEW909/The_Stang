@@ -82,7 +82,10 @@ export type EngineEffect =
   /** Records a value-bearing choice (e.g. which friend Harper sent for help) — not a plain yes/no flag. */
   | { type: "setDecision"; key: string; value: string }
   | { type: "joinParty"; npcId: string }
-  | { type: "leaveParty"; npcId: string };
+  | { type: "leaveParty"; npcId: string }
+  /** Activates a ChallengeDef immediately — for decision points triggered from
+   * a dialogue choice or interactable rather than by entering a room. */
+  | { type: "startChallenge"; challengeId: string };
 
 export interface InteractableDef {
   id: string;
@@ -200,6 +203,38 @@ export interface DialogueTree {
   nodes: DialogueNode[];
 }
 
+/** A key decision / skill-check moment: several options are always shown
+ * together (unlike a dialogue gate, nothing is hidden — she needs to see the
+ * paths to pick between them), each optionally gated by a Requirement.
+ * Picking a gated option she doesn't qualify for is a real, recoverable
+ * failure (failureText, no effects, challenge stays open to retry a
+ * different option) — same philosophy as ExitDef.requires. There is no
+ * authored "Other" option: any input that isn't a bare number matching one
+ * of these options falls straight through to the normal room parser, so
+ * trying her own idea always just works like it would anywhere else. */
+export interface ChallengeOption {
+  id: string;
+  label: string;
+  requires?: Requirement;
+  successText: string;
+  /** Shown when requires isn't met. Irrelevant (never shown) if requires is unset. */
+  failureText?: string;
+  /** Applied only on success. */
+  effects?: EngineEffect[];
+}
+
+export interface ChallengeDef {
+  id: string;
+  /** If set, this challenge auto-activates when the room is entered/looked at
+   * while unresolved, and auto-cancels (not resolves — it can retrigger later)
+   * if she leaves without resolving it. Omit for challenges only started via
+   * the `startChallenge` effect — decisions with no physical location, like
+   * choosing which friend to bring. */
+  roomId?: string;
+  prompt: string;
+  options: ChallengeOption[];
+}
+
 export interface EpisodeDef {
   id: string;
   number: number;
@@ -208,6 +243,7 @@ export interface EpisodeDef {
   scenes: SceneDef[];
   items: ItemDef[];
   dialogues: DialogueTree[];
+  challenges: ChallengeDef[];
   startSceneId: string;
   endingText: string;
 }

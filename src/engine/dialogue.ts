@@ -1,5 +1,6 @@
-import type { DialogueChoice, DialogueNode, DialogueTree, EpisodeDef, Requirement } from "./types";
+import type { DialogueChoice, DialogueNode, DialogueTree, EpisodeDef } from "./types";
 import type { GameState } from "./state";
+import { meetsRequirement } from "./requirement";
 
 export function findDialogueTree(episode: EpisodeDef, treeId: string): DialogueTree {
   const tree = episode.dialogues.find((d) => d.id === treeId);
@@ -11,12 +12,6 @@ export function findDialogueNode(tree: DialogueTree, nodeId: string): DialogueNo
   const node = tree.nodes.find((n) => n.id === nodeId);
   if (!node) throw new Error(`Unknown dialogue node: ${nodeId} in tree ${tree.id}`);
   return node;
-}
-
-export function meetsRequirement(state: GameState, requires: Requirement | undefined): boolean {
-  if (!requires) return true;
-  if ("stat" in requires) return state.player.stats[requires.stat] >= requires.min;
-  return (state.npcState[requires.npcId]?.trust ?? 0) >= requires.minTrust;
 }
 
 /** Choices currently offered to the player: gated choices only appear once

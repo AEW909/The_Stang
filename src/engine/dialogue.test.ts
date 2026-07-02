@@ -17,6 +17,7 @@ const testEpisode: EpisodeDef = {
   prerequisites: [],
   startSceneId: "s1",
   items: [],
+  challenges: [],
   dialogues: [
     {
       id: "ellie_intro",

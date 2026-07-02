@@ -25,6 +25,7 @@ export interface Checkpoint {
   npcState: Record<string, NpcRuntimeState>;
   decisions: Record<string, string>;
   party: string[];
+  resolvedChallenges: string[];
 }
 
 export interface GameState {
@@ -42,6 +43,13 @@ export interface GameState {
    * a checkpoint is always taken at a scene's start, before any dialogue
    * within it could have begun, so restarting naturally exits a conversation. */
   activeDialogue: ActiveDialogue | null;
+  /** Non-null while a key-decision/skill-check is open for numbered-input
+   * resolution. Also not checkpointed, for the same reason as activeDialogue —
+   * see restartFromCheckpoint. */
+  activeChallengeId: string | null;
+  /** Ids of successfully resolved ChallengeDefs — persisted so a room-scoped
+   * challenge doesn't re-trigger every time she walks back in. */
+  resolvedChallenges: string[];
   checkpoint: Checkpoint;
   ended: boolean;
 }
@@ -93,6 +101,8 @@ export function createInitialState(
     decisions: {},
     party: [],
     activeDialogue: null,
+    activeChallengeId: null,
+    resolvedChallenges: [],
     checkpoint: {
       sceneId: startScene.id,
       roomId: startScene.startRoomId,
@@ -102,6 +112,7 @@ export function createInitialState(
       npcState: { ...npcState },
       decisions: {},
       party: [],
+      resolvedChallenges: [],
     },
     ended: false,
   };
@@ -118,7 +129,9 @@ export function restartFromCheckpoint(state: GameState): GameState {
     npcState: { ...state.checkpoint.npcState },
     decisions: { ...state.checkpoint.decisions },
     party: [...state.checkpoint.party],
+    resolvedChallenges: [...state.checkpoint.resolvedChallenges],
     activeDialogue: null,
+    activeChallengeId: null,
     ended: false,
   };
 }

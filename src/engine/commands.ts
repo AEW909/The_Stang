@@ -1,7 +1,9 @@
 import type { Campaign, DialogueNode, DialogueTree, EngineEffect, EpisodeDef, ExitDef, InteractableDef, ItemDef, RoomDef } from "./types";
 import { findItem, findRoom, restartFromCheckpoint, type GameState } from "./state";
 import { parseCommand } from "./parser";
-import { availableChoices, findDialogueNode, findDialogueTree, meetsRequirement } from "./dialogue";
+import { availableChoices, findDialogueNode, findDialogueTree } from "./dialogue";
+import { describeChallenge, findChallenge, findChallengeForRoom } from "./challenge";
+import { meetsRequirement } from "./requirement";
 
 export interface CommandResult {
   state: GameState;
@@ -157,6 +159,12 @@ function applyEffects(state: GameState, episode: EpisodeDef, effects: EngineEffe
       case "leaveParty":
         next = { ...next, party: next.party.filter((id) => id !== effect.npcId) };
         break;
+      case "startChallenge": {
+        const challenge = findChallenge(episode, effect.challengeId);
+        next = { ...next, activeChallengeId: challenge.id };
+        output.push(...describeChallenge(challenge));
+        break;
+      }
     }
   }
   return { state: next, output };
@@ -193,6 +201,7 @@ function syncSceneAndCheckpoint(state: GameState, episode: EpisodeDef): GameStat
       npcState: { ...state.npcState },
       decisions: { ...state.decisions },
       party: [...state.party],
+      resolvedChallenges: [...state.resolvedChallenges],
     },
   };
 }
@@ -202,27 +211,47 @@ function syncSceneAndCheckpoint(state: GameState, episode: EpisodeDef): GameStat
  * interactables are currently revealed and not yet taken. An interactable
  * drops out once it's taken (derived from inventory, no extra state needed)
  * or stays out until its container is opened (see isRevealed). NPCs and
- * plot-critical objects opt out via excludeFromList and stay in authored prose. */
-function describeRoom(state: GameState, episode: EpisodeDef): string[] {
+ * plot-critical objects opt out via excludeFromList and stay in authored prose.
+ *
+ * Also where a room-scoped ChallengeDef activates: entering/looking at its
+ * room while unresolved (re)activates it and appends its prompt+options;
+ * leaving without resolving it cancels (not resolves) it, so a stray number
+ * typed elsewhere can't be misread as picking from a challenge she's left. */
+function describeRoom(state: GameState, episode: EpisodeDef): CommandResult {
   const { room } = findRoom(episode, state.currentRoomId);
+  let next = state;
+
+  if (next.activeChallengeId) {
+    const active = episode.challenges.find((c) => c.id === next.activeChallengeId);
+    if (active?.roomId && active.roomId !== room.id) {
+      next = { ...next, activeChallengeId: null };
+    }
+  }
+
   const lines = [`-- ${room.name} --`, room.description];
 
   const footerItems = room.interactables.filter((i) => {
     if (i.excludeFromList) return false;
-    if (!isRevealed(state, room, i)) return false;
-    if (i.itemId && state.inventory.includes(i.itemId)) return false;
+    if (!isRevealed(next, room, i)) return false;
+    if (i.itemId && next.inventory.includes(i.itemId)) return false;
     return true;
   });
 
   if (footerItems.length > 0) {
     const fragments = footerItems.map((i) => {
-      if (i.openable && isOpen(state, room, i) && i.openShortDescription) return i.openShortDescription;
+      if (i.openable && isOpen(next, room, i) && i.openShortDescription) return i.openShortDescription;
       return i.shortDescription ?? i.name;
     });
     lines.push(`You can also see: ${fragments.join(" ")}`);
   }
 
-  return lines;
+  const roomChallenge = findChallengeForRoom(episode, room.id);
+  if (roomChallenge && !next.resolvedChallenges.includes(roomChallenge.id)) {
+    next = { ...next, activeChallengeId: roomChallenge.id };
+    lines.push(...describeChallenge(roomChallenge));
+  }
+
+  return { state: next, output: lines };
 }
 
 /** An exit's gate conditions are mutually exclusive per exit — each one
@@ -249,7 +278,8 @@ function moveThroughExit(state: GameState, episode: EpisodeDef, exit: ExitDef, e
     next = applied.state;
     output.push(...applied.output);
   }
-  return { state: next, output: [...output, ...describeRoom(next, episode)] };
+  const described = describeRoom(next, episode);
+  return { state: described.state, output: [...output, ...described.output] };
 }
 
 function resolveGo(state: GameState, episode: EpisodeDef, target: string, isRunning: boolean): CommandResult {
@@ -443,9 +473,10 @@ function handleDialogueInput(state: GameState, episode: EpisodeDef, raw: string)
 
   if (trimmed === "restart") {
     const next = restartFromCheckpoint(state);
+    const described = describeRoom(next, episode);
     return {
-      state: next,
-      output: ["You come back to yourself, right where you last caught your breath.", ...describeRoom(next, episode)],
+      state: described.state,
+      output: ["You come back to yourself, right where you last caught your breath.", ...described.output],
     };
   }
   if (trimmed === "help" || trimmed === "?") {
@@ -472,6 +503,38 @@ function handleDialogueInput(state: GameState, episode: EpisodeDef, raw: string)
     output.push(...describeDialogueNode(next, nextNode));
   } else {
     next = { ...next, activeDialogue: null };
+  }
+
+  return { state: next, output };
+}
+
+/** Resolving a numbered pick from an active challenge. Unlike dialogue, a
+ * failed pick doesn't end anything — the challenge stays open so she can try
+ * a different option, matching the "recoverable failure" philosophy used
+ * everywhere else (see the caretaker encounter). Only a successful pick
+ * consumes it. */
+function resolveChallengePick(state: GameState, episode: EpisodeDef, index: number): CommandResult {
+  const challenge = findChallenge(episode, state.activeChallengeId!);
+  const option = challenge.options[index - 1];
+  if (!option) {
+    return { state, output: ["That's not one of the options. Type its number, or try something else."] };
+  }
+  if (!meetsRequirement(state, option.requires)) {
+    return { state, output: [option.failureText ?? "That doesn't work."] };
+  }
+
+  const applied = applyEffects(state, episode, option.effects ?? []);
+  let next: GameState = {
+    ...applied.state,
+    activeChallengeId: null,
+    resolvedChallenges: [...applied.state.resolvedChallenges, challenge.id],
+  };
+  const output = [option.successText, ...applied.output];
+
+  if (next.currentRoomId !== state.currentRoomId) {
+    const described = describeRoom(next, episode);
+    next = described.state;
+    output.push(...described.output);
   }
 
   return { state: next, output };
@@ -507,6 +570,12 @@ export function getSuggestions(state: GameState, episode: EpisodeDef): string[] 
   }
   const { room } = findRoom(episode, state.currentRoomId);
   const suggestions: string[] = [];
+  // Challenge options are additive, not exclusive — normal room suggestions
+  // still follow, since trying her own idea ("Other") always just works.
+  if (state.activeChallengeId) {
+    const challenge = findChallenge(episode, state.activeChallengeId);
+    challenge.options.forEach((option, i) => suggestions.push(`${i + 1}. ${option.label}`));
+  }
   for (const exit of room.exits) suggestions.push(`go ${exit.aliases[0]}`);
   for (const interactable of room.interactables) {
     if (!isRevealed(state, room, interactable)) continue;
@@ -537,6 +606,19 @@ export function processCommand(
     const dialogueResult = handleDialogueInput(state, episode, raw);
     const finalState = syncSceneAndCheckpoint(dialogueResult.state, episode);
     return { state: finalState, output: dialogueResult.output };
+  }
+
+  // A challenge is non-modal, unlike dialogue: a bare number picks one of its
+  // options, but anything else — "look", "examine X", "go X", her own idea —
+  // falls straight through to normal parsing below. That fallthrough *is*
+  // the "Other" option; there's nothing separate to author for it.
+  if (state.activeChallengeId) {
+    const index = Number.parseInt(raw.trim(), 10);
+    if (Number.isInteger(index)) {
+      const challengeResult = resolveChallengePick(state, episode, index);
+      const finalState = syncSceneAndCheckpoint(challengeResult.state, episode);
+      return { state: finalState, output: challengeResult.output };
+    }
   }
 
   const cmd = parseCommand(raw);
@@ -570,13 +652,14 @@ export function processCommand(
       result = { state, output: describeMap(state, episode) };
       break;
     case "look":
-      result = { state, output: describeRoom(state, episode) };
+      result = describeRoom(state, episode);
       break;
     case "restart": {
       const next = restartFromCheckpoint(state);
+      const described = describeRoom(next, episode);
       result = {
-        state: next,
-        output: ["You come back to yourself, right where you last caught your breath.", ...describeRoom(next, episode)],
+        state: described.state,
+        output: ["You come back to yourself, right where you last caught your breath.", ...described.output],
       };
       break;
     }

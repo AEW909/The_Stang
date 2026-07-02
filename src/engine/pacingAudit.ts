@@ -21,16 +21,21 @@ function hasConsequentialEffects(effects: EngineEffect[] | undefined): boolean {
 /** An "obstacle" room is one where either (a) getting past it requires more
  * than a single unconditional `go` — at least one exit is gated somehow — or
  * (b) something in the room has a real narrative consequence (a taken/examined
- * object that sets a flag, records a decision, shifts trust, etc.), even if it
- * doesn't block progress. This is a direct automated version of
- * VERIFICATION_CHECKLIST.md item 12: a cheap first-pass signal, not a
- * substitute for judging whether an obstacle is actually fun — a gated exit
- * that's trivial to pass, or a flag nobody will ever notice, still count here. */
-export function isObstacleRoom(room: RoomDef): boolean {
+ * object that sets a flag, records a decision, shifts trust, etc.), or (c) it
+ * hosts a ChallengeDef (a key decision/skill-check is about as "something to
+ * do" as it gets), even if none of these block progress. This is a direct
+ * automated version of VERIFICATION_CHECKLIST.md item 12: a cheap first-pass
+ * signal, not a substitute for judging whether an obstacle is actually fun —
+ * a gated exit that's trivial to pass, or a flag nobody will ever notice,
+ * still count here. */
+export function isObstacleRoom(episode: EpisodeDef, room: RoomDef): boolean {
   const hasGatedExit = room.exits.some(
     (e: ExitDef) => !!(e.unlocksWithItemId || e.requiresFlag || e.requires || e.requiresRun),
   );
   if (hasGatedExit) return true;
+
+  const hasChallenge = episode.challenges.some((c) => c.roomId === room.id);
+  if (hasChallenge) return true;
 
   return room.interactables.some(
     (i) => hasConsequentialEffects(i.onTakeEffects) || hasConsequentialEffects(i.onExamineEffects) || hasConsequentialEffects(i.onUseEffects),
@@ -52,7 +57,7 @@ export function auditPacing(episode: EpisodeDef): PacingAudit {
   const report: string[] = [];
 
   rooms.forEach(({ scene, room }, i) => {
-    const obstacle = isObstacleRoom(room);
+    const obstacle = isObstacleRoom(episode, room);
     if (obstacle) {
       maxGap = Math.max(maxGap, sinceLastObstacle);
       sinceLastObstacle = 0;

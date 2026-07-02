@@ -26,6 +26,10 @@ export const episode1: EpisodeDef = {
   // Section 4). The dialogue/trust/party engine exists from Slice 2 onward; Episode 2 is
   // the first to actually populate this array.
   dialogues: [],
+  // Same story: the caretaker/park/front-doors moments predate the ChallengeDef
+  // primitive and were deliberately left as their existing exit-based
+  // implementations rather than retrofitted. Episode 2+ is where this gets used.
+  challenges: [],
   items: [
     {
       id: "spare_key",
