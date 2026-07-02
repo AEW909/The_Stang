@@ -48,7 +48,7 @@ A small **WALKING/RUNNING indicator** was added to the terminal UI (`src/App.tsx
 
 A `?reset` URL query param (undocumented in the UI, see `src/App.tsx`) wipes the `localStorage` save on load, for the project owner to clear their own testing progress before handing the game to its actual player.
 
-Camille's note (`data/episodes/episode1.ts`, `hallway` room) is still placeholder text, flagged in the file for the project owner to hand-write.
+**Harper finished Episode 1 and loved it.** Camille's note (`data/episodes/episode1.ts`, `hallway` room) has since been hand-written for real — no longer placeholder text. It's written in Camille's voice but seeded with wrongness a reread should catch ("don't tell Mum," "I felt it too, before I left") rather than reading as a straightforward runaway note, matching the campaign bible's standing rule that any "Camille" contact before the Shadowfell should read as suspect. `endingText` was rewritten to match, calling out specifically what feels off about it, instead of narrating around a placeholder disclaimer.
 
 ---
 

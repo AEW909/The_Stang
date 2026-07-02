@@ -9,10 +9,9 @@
 // not yet taken (see describeRoom in src/engine/commands.ts). This keeps
 // room text and room data from drifting apart as more episodes are added.
 //
-// DRAFT/PLACEHOLDER CONTENT: room descriptions, comedic asides, and
-// especially Camille's note (see the `hallway` room and `endingText` below)
-// are reasonable creative choices made to fill the brief, not locked canon.
-// The project owner may want to hand-write the note specifically.
+// DRAFT CONTENT: room descriptions and comedic asides are reasonable
+// creative choices made to fill the brief, not locked canon. Camille's
+// note (see the `hallway` room and `endingText` below) is final.
 
 import type { EpisodeDef } from "../../engine/types";
 
@@ -471,7 +470,7 @@ export const episode1: EpisodeDef = {
               id: "note",
               name: "NOTE",
               examineText:
-                "Harper —\n\nI had to go. I can't explain it properly here, and I don't think you'd believe me if I tried. Please don't come looking. I promise I'll explain everything when I can.\n\nI love you. Stay safe.\n\n— Camille\n\n[DRAFT — placeholder note content, flagged for the project owner to hand-write.]",
+                "Harper —\n\nDon't panic, and don't tell Mum yet — I just need a bit of time to sort some things out. This isn't about you. It's definitely not your fault.\n\nYou know that feeling today's had, like the whole town's holding its breath? I felt it too, before I left. I can't explain it properly, and I don't think you'd believe me if I tried. Please don't come looking for me. I mean it. I promise I'll explain everything the second I can.\n\nYou're braver than you think you are, Harp. I've always known that about you, even when you don't.\n\nI love you more than anything.\n\n— C",
               excludeFromList: true,
               onExamineEffects: [
                 { type: "setFlag", flag: "camilleNoteFound", value: true },
@@ -485,5 +484,5 @@ export const episode1: EpisodeDef = {
     },
   ],
   endingText:
-    "You read it twice. Then a third time, like the words might rearrange themselves into something that makes more sense.\n\nThey don't.\n\nCamille is gone, and something about this whole too-quiet day tells you it isn't as simple as her deciding to leave.\n\n— END OF EPISODE 1 —\n\n(Camille's note above is a draft placeholder — flagged for the project owner to hand-write its real contents.)",
+    "You read it twice. Then a third time, like the words might rearrange themselves into something that makes more sense.\n\nThey don't. Camille never says \"don't tell Mum.\" Camille never leaves without a reason she'll actually give you, sooner or later.\n\nShe felt it too, she said. Whatever \"it\" is.\n\nCamille is gone, and something about this whole too-quiet day tells you it isn't as simple as her deciding to leave.\n\n— END OF EPISODE 1 —",
 };
