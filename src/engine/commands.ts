@@ -632,11 +632,27 @@ export function processCommand(
       // A bare word that happens to name one of this room's exits (e.g. "push",
       // "dodge", "hide", "closet", "back") is treated as "go <word>" — those
       // words are exactly what the suggestions bar surfaces, so a player
-      // shouldn't have to remember to prefix them with "go".
+      // shouldn't have to remember to prefix them with "go". Checked first so
+      // "push"/"push past" (an exit word in rooms like the caretaker's) always
+      // wins over the fallback below.
       const { room } = findRoom(episode, state.currentRoomId);
-      result = findExit(room, cmd.raw)
-        ? resolveGo(state, episode, cmd.raw, false)
-        : { state, output: [`I don't understand "${cmd.raw}". Type HELP for the list of commands.`] };
+      if (findExit(room, cmd.raw)) {
+        result = resolveGo(state, episode, cmd.raw, false);
+        break;
+      }
+
+      // "push X" / "press X" as natural synonyms for "use X" on a fixture or
+      // item (a button, a lever) — kept out of the main verb table rather
+      // than a global alias, specifically so it doesn't collide with "push"
+      // meaning an exit elsewhere; this only fires once the exit check above
+      // has already failed to match.
+      const pushOrPress = cmd.raw.match(/^(?:push|press)\s+(.+)$/);
+      if (pushOrPress) {
+        result = resolveUse(state, episode, pushOrPress[1], undefined);
+        break;
+      }
+
+      result = { state, output: [`I don't understand "${cmd.raw}". Type HELP for the list of commands.`] };
       break;
     }
     case "help":

@@ -350,7 +350,7 @@ export const episode1: EpisodeDef = {
           interactables: [],
           exits: [
             {
-              aliases: ["out", "forward", "e"],
+              aliases: ["out", "forward", "e", "door", "doors"],
               targetRoomId: "high_street_room",
               requiresFlag: "frontDoorsUnlocked",
               requiresRun: true,

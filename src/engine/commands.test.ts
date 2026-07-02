@@ -609,4 +609,26 @@ describe("Episode 1 — the front doors (run-only timed exit)", () => {
     const retried = run(backAtReception, "use button", "go forward", "run out");
     expect(retried.currentRoomId).toBe("high_street_room");
   });
+
+  it("running through the door by name (not just the 'out' alias) works too", () => {
+    const unlocked = run(atReception(), "use button", "go forward");
+    const result = processCommand(unlocked, campaign, episode1, "run through door");
+    expect(result.state.currentRoomId).toBe("high_street_room");
+  });
+});
+
+describe("Episode 1 — 'push'/'press' as natural USE synonyms", () => {
+  it("push button and press button both trigger the button's USE effect", () => {
+    const push = processCommand(atReception(), campaign, episode1, "push button");
+    expect(push.state.flags.frontDoorsUnlocked).toBe(true);
+    expect(push.output.join(" ")).toMatch(/clunks and releases/i);
+
+    const press = processCommand(atReception(), campaign, episode1, "press the button");
+    expect(press.state.flags.frontDoorsUnlocked).toBe(true);
+  });
+
+  it("does not shadow 'push'/'push past' as an exit word in the caretaker encounter", () => {
+    const result = processCommand(atCaretaker(), campaign, episode1, "push past");
+    expect(result.output.join(" ")).toMatch(/force your way past/i); // the exit's lockedText, not a USE fallback
+  });
 });
