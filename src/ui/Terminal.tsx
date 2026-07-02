@@ -9,10 +9,12 @@ export function Terminal({
   lines,
   suggestions,
   onSubmit,
+  lastMove,
 }: {
   lines: TerminalLine[];
   suggestions: string[];
   onSubmit: (raw: string) => void;
+  lastMove?: "running" | "walking" | null;
 }) {
   const [value, setValue] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -62,6 +64,7 @@ export function Terminal({
           spellCheck={false}
           autoComplete="off"
         />
+        {lastMove && <span className={`move-indicator move-indicator-${lastMove}`}>{lastMove}</span>}
       </form>
     </div>
   );

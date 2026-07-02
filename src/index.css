@@ -157,3 +157,22 @@ body {
   outline: none;
   text-shadow: 0 0 3px rgba(51, 255, 51, 0.6);
 }
+
+.move-indicator {
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  padding: 2px 8px;
+  white-space: nowrap;
+  opacity: 0.85;
+}
+
+.move-indicator-walking {
+  color: #33ff33;
+}
+
+.move-indicator-running {
+  color: #baff33;
+  text-shadow: 0 0 4px rgba(186, 255, 51, 0.8);
+}

@@ -6,6 +6,7 @@ import { episode1 } from "./data/episodes/episode1";
 import { createInitialState } from "./engine/state";
 import type { GameState, PlayerProfile } from "./engine/state";
 import { getSuggestions, processCommand } from "./engine/commands";
+import { parseCommand } from "./engine/parser";
 import { clearSave, loadGame, saveGame } from "./engine/save";
 
 const episode = episode1;
@@ -20,6 +21,10 @@ export default function App() {
   const [state, setState] = useState<GameState | null>(null);
   const [lines, setLines] = useState<TerminalLine[]>([]);
   const [loaded, setLoaded] = useState(false);
+  // Purely a UI hint confirming which way the last move registered — not
+  // persisted, not part of GameState. Only updates on an actual go/run
+  // command; stays as-is for any other command so it doesn't flicker.
+  const [lastMove, setLastMove] = useState<"running" | "walking" | null>(null);
 
   useEffect(() => {
     // Visit with ?reset in the URL to wipe the save (e.g. after testing, before
@@ -56,6 +61,9 @@ export default function App() {
 
   function handleCommand(raw: string) {
     if (!state) return;
+    const parsed = parseCommand(raw);
+    if (parsed.verb === "go") setLastMove(parsed.running ? "running" : "walking");
+
     const result = processCommand(state, campaign, episode, raw);
     setState(result.state);
     saveGame(result.state);
@@ -69,5 +77,5 @@ export default function App() {
     return <HeroCreator onComplete={handleHeroComplete} />;
   }
 
-  return <Terminal lines={lines} suggestions={getSuggestions(state, episode)} onSubmit={handleCommand} />;
+  return <Terminal lines={lines} suggestions={getSuggestions(state, episode)} onSubmit={handleCommand} lastMove={lastMove} />;
 }
