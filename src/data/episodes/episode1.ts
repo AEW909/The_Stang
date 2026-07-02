@@ -77,6 +77,16 @@ export const episode1: EpisodeDef = {
       flavourUses: [],
       fallbackUseText: "You consider eating it. You reconsider immediately. Some mysteries are better left wrapped.",
     },
+    {
+      id: "camilles_scarf",
+      name: "SCARF",
+      description: "A stripy scarf. Camille's. You're not leaving it behind.",
+      tag: "flavour",
+      takeText:
+        "You unhook it carefully. It's definitely hers — you can still smell her shampoo on it, faint but unmistakable. Then a branch snaps somewhere in the trees behind you. Not wind. You don't wait to find out what it was.",
+      flavourUses: [],
+      fallbackUseText: "You hold onto it. It's hers. That's all that matters right now.",
+    },
   ],
   scenes: [
     {
@@ -308,6 +318,22 @@ export const episode1: EpisodeDef = {
                 "Rows and rows of names, all present, all accounted for. Except you're the only person you've actually seen all morning.",
               shortDescription: "The SIGN-IN BOOK lies open on the desk.",
             },
+            {
+              id: "desk",
+              name: "RECEPTION DESK",
+              examineText:
+                "The reception desk, sign-in book still open on top. Tucked underneath, out of sight unless you're looking for it, is a small red BUTTON.",
+              shortDescription: "A RECEPTION DESK sits by the door.",
+            },
+            {
+              id: "button",
+              name: "BUTTON",
+              examineText:
+                "A small red button, dusty with disuse. No label. There's exactly one way to find out what it does.",
+              shortDescription: "A small red BUTTON is fitted underneath the desk.",
+              onUseEffects: [{ type: "setFlag", flag: "frontDoorsUnlocked", value: true }],
+              useText: "You press it. Somewhere near the front doors, something clunks and releases. You'd better hurry — run.",
+            },
           ],
           exits: [{ aliases: ["forward", "e"], targetRoomId: "front_doors" }],
         },
@@ -316,9 +342,23 @@ export const episode1: EpisodeDef = {
           name: "Front Doors",
           locationId: "school",
           description:
-            "The double doors at the front of the school stand open, swinging slightly in a breeze that shouldn't be indoors. Through them: daylight, and the ordinary, empty shape of the school car park.",
+            "The double doors at the front of the school are shut fast, a heavy release mechanism gleaming beside the frame. Through the glass: daylight, and the ordinary, empty shape of the school car park, further away than it's ever felt.",
           interactables: [],
-          exits: [{ aliases: ["out", "forward", "e"], targetRoomId: "high_street_room" }],
+          exits: [
+            {
+              aliases: ["out", "forward", "e"],
+              targetRoomId: "high_street_room",
+              requiresFlag: "frontDoorsUnlocked",
+              requiresRun: true,
+              lockedText:
+                "You push at the doors, but they don't budge. Locked tight. There must be a release somewhere — try the reception desk, back the way you came.",
+              wrongRunText:
+                "The doors are unlocked — but not for long. You're not fast enough this time; you hear the lock clunk back into place behind the panic bar. Better hit that button again.",
+              successText:
+                "You shove through the doors just as the mechanism clunks again behind you, and stumble out into the daylight.",
+            },
+            { aliases: ["back", "w"], targetRoomId: "reception" },
+          ],
         },
       ],
     },
@@ -370,8 +410,28 @@ export const episode1: EpisodeDef = {
                 "A brass plaque reads 'IN MEMORY OF BARRY, WHO LOVED THIS BENCH.' Barry, if you're out there, this is a lot right now.",
               shortDescription: "A BENCH sits empty, usually full of pensioners at this hour.",
             },
+            {
+              id: "scarf",
+              name: "SCARF",
+              examineText:
+                "It's caught on one of the swing's chains, fluttering slightly. You'd know that stripy pattern anywhere — it's Camille's. She never goes anywhere without it.",
+              shortDescription: "A SCARF is caught on one of the swing's chains.",
+              takeable: true,
+              itemId: "camilles_scarf",
+              onTakeEffects: [{ type: "setFlag", flag: "chasedFromPark", value: true }],
+            },
           ],
-          exits: [{ aliases: ["home", "forward", "e"], targetRoomId: "front_garden" }],
+          exits: [
+            {
+              aliases: ["home", "forward", "e"],
+              targetRoomId: "front_garden",
+              successText: "You head for home, the park falling quiet behind you.",
+              alternateSuccessText: {
+                flag: "chasedFromPark",
+                text: "You don't walk the rest of the way — you run, the scarf balled in your fist, and don't stop until your own front door is in reach, chest heaving.",
+              },
+            },
+          ],
         },
       ],
     },

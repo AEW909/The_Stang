@@ -2,7 +2,11 @@
 // intentionally fixed and small — see docs/SLICE1_HANDOFF.md Conventions.
 
 export type ParsedCommand =
-  | { verb: "go"; target: string }
+  // `running` is true only when the player literally typed "run" — "walk" is
+  // a plain synonym for "go" and always false. Some exits (timed dashes)
+  // only succeed if the player specifically ran; this field is always
+  // present (never optional) so that distinction can't be silently dropped.
+  | { verb: "go"; target: string; running: boolean }
   | { verb: "look" }
   | { verb: "examine"; target: string }
   | { verb: "inventory" }
@@ -60,7 +64,7 @@ export function parseCommand(raw: string): ParsedCommand {
   const first = tokens[0];
 
   if (DIRECTIONS.has(first) && tokens.length === 1) {
-    return { verb: "go", target: first };
+    return { verb: "go", target: first, running: false };
   }
 
   const canonicalVerb = VERB_ALIASES[first];
@@ -70,7 +74,7 @@ export function parseCommand(raw: string): ParsedCommand {
 
   switch (canonicalVerb) {
     case "go":
-      return rest ? { verb: "go", target: rest } : { verb: "unknown", raw: trimmed };
+      return rest ? { verb: "go", target: rest, running: first === "run" } : { verb: "unknown", raw: trimmed };
     case "look": {
       // "look" alone describes the room; "look at X" / "look X" is a synonym for "examine X".
       if (!rest) return { verb: "look" };

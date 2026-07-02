@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import { parseCommand } from "./parser";
 
 describe("parseCommand", () => {
-  it("parses bare directions as go commands", () => {
-    expect(parseCommand("n")).toEqual({ verb: "go", target: "n" });
-    expect(parseCommand("E")).toEqual({ verb: "go", target: "e" });
+  it("parses bare directions as go commands, never running", () => {
+    expect(parseCommand("n")).toEqual({ verb: "go", target: "n", running: false });
+    expect(parseCommand("E")).toEqual({ verb: "go", target: "e", running: false });
   });
 
   it("parses go with a named target", () => {
-    expect(parseCommand("go door")).toEqual({ verb: "go", target: "door" });
+    expect(parseCommand("go door")).toEqual({ verb: "go", target: "door", running: false });
   });
 
   it("parses examine and its alias", () => {
@@ -65,9 +65,10 @@ describe("parseCommand", () => {
     expect(parseCommand("take")).toEqual({ verb: "unknown", raw: "take" });
   });
 
-  it("parses walk/run as go, and grab as take", () => {
-    expect(parseCommand("walk door")).toEqual({ verb: "go", target: "door" });
-    expect(parseCommand("run door")).toEqual({ verb: "go", target: "door" });
+  it("parses walk as a plain synonym for go (never running), and run as go with running: true", () => {
+    expect(parseCommand("walk door")).toEqual({ verb: "go", target: "door", running: false });
+    expect(parseCommand("run door")).toEqual({ verb: "go", target: "door", running: true });
+    expect(parseCommand("run")).toEqual({ verb: "unknown", raw: "run" });
     expect(parseCommand("grab key")).toEqual({ verb: "take", target: "key" });
   });
 

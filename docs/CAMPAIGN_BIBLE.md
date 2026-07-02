@@ -82,6 +82,8 @@ This list should be treated as authoritative and extended — never forked. Befo
 |---|---|---|
 | `camilleNoteFound` | Episode 1 | Harper has read Camille's note. |
 | `caretakerEvaded` | Episode 1 | The Episode 1 evasion encounter was resolved. |
+| `chasedFromPark` | Episode 1 | Harper found Camille's scarf on the swings in the park and was chased home by something in the trees (never confirmed as real). |
+| `frontDoorsUnlocked` | Episode 1 | Temporary — true only in the window between pressing the reception release button and reaching the front doors. Cleared automatically if the player doesn't RUN there in time. |
 | `hasMetEllie` / `hasMetIsabella` / `hasMetAkira` / `hasMetJoshua` | Episode 2 | Friend group introduced. |
 | `dignanSuspected` | Episode 3 | Player suspicion has been directed at Dignan. |
 | `mrsAyersFound` | Episode 5 | Mrs Ayers has been located. |
@@ -167,4 +169,4 @@ NEW CANON ADDITIONS (if any)
   episode's content
 ```
 
-**Handoff instruction to Claude Code**, once a brief is ready: *"Here is the Episode Brief for Episode N. Implement it as `data/episodes/episodeN.ts` following the schema established in Episode 1 and the campaign/episode architecture in `docs/SLICE1_HANDOFF.md`. Reference existing campaign IDs where they already exist. If the brief's NEW CANON ADDITIONS section adds anything, apply those additions to both `data/campaign.ts` and this bible (`docs/CAMPAIGN_BIBLE.md`) in the same pass, so the two never drift out of sync."*
+**Handoff instruction to Claude Code**, once a brief is ready: *"Here is the Episode Brief for Episode N. Implement it as `data/episodes/episodeN.ts` following the schema established in Episode 1 and the campaign/episode architecture in `docs/SLICE1_HANDOFF.md`. Reference existing campaign IDs where they already exist. If the brief's NEW CANON ADDITIONS section adds anything, apply those additions to both `data/campaign.ts` and this bible (`docs/CAMPAIGN_BIBLE.md`) in the same pass, so the two never drift out of sync. Before calling it done, run the full playthrough audit in `docs/VERIFICATION_CHECKLIST.md`."*

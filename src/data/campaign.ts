@@ -138,6 +138,8 @@ export const campaign: Campaign = {
   initialFlags: {
     camilleNoteFound: false,
     caretakerEvaded: false,
+    chasedFromPark: false,
+    frontDoorsUnlocked: false,
     hasMetEllie: false,
     hasMetIsabella: false,
     hasMetAkira: false,

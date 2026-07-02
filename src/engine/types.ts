@@ -104,11 +104,19 @@ export interface InteractableDef {
   itemId?: string;
   /** For plot objects (e.g. a note) where examining it triggers story effects. */
   onExamineEffects?: EngineEffect[];
+  /** Fires when this item is successfully taken — e.g. picking up a keepsake
+   * that also sets a flag something else reacts to. */
+  onTakeEffects?: EngineEffect[];
   openable?: boolean;
   /** Starts open; defaults to false (closed) when openable. */
   startsOpen?: boolean;
   openText?: string;
   closeText?: string;
+  /** Lets USE apply to this interactable directly (a fixed-in-place lever,
+   * button, switch — not something you TAKE first). If neither this nor
+   * useText is set, USE on this interactable just says "Nothing happens." */
+  onUseEffects?: EngineEffect[];
+  useText?: string;
 }
 
 /** Deterministic gate — no dice: a flat threshold on one of Harper's stats or an
@@ -131,6 +139,16 @@ export interface ExitDef {
   requires?: Requirement;
   /** Narration shown (before the destination room's description) when passage succeeds. */
   successText?: string;
+  /** Shown instead of successText when the named flag is true — e.g. a tenser
+   * narration for the same exit once an earlier story beat has happened. */
+  alternateSuccessText?: { flag: string; text: string };
+  /** Timed-dash exits: this exit only succeeds via the RUN verb, not GO/WALK.
+   * Meant to be combined with requiresFlag (the "window" a switch/lever
+   * opens) — if the flag is true but the player didn't run, the window
+   * slams shut again (requiresFlag is cleared) and wrongRunText is shown
+   * instead of the plain lockedText, so retrying means re-opening the window. */
+  requiresRun?: boolean;
+  wrongRunText?: string;
   /** Effects applied (in addition to moving the player) when passage succeeds. */
   onSuccess?: EngineEffect[];
 }

@@ -187,8 +187,9 @@ describe("Episode 1 — flavour item contract", () => {
       "go forward",
       "go closet",
       "go forward",
+      "use button",
       "go forward",
-      "go forward",
+      "run forward",
     );
     // Now in high_street_room, an unauthored scene for this item.
     expect(state.currentRoomId).toBe("high_street_room");
@@ -363,8 +364,9 @@ describe("Episode 1 — full playthrough reaches the cliffhanger", () => {
       "go closet",
       "go forward",
       "examine sign-in book",
+      "use button",
       "go forward",
-      "go forward",
+      "run forward",
       "examine newsagent",
       "go forward",
       "examine swings",
@@ -387,8 +389,9 @@ describe("Episode 1 — full playthrough reaches the cliffhanger", () => {
       "go forward",
       "go closet",
       "go forward",
+      "use button",
       "go forward",
-      "go forward",
+      "run forward",
       "go forward",
       "go home",
       "go door",
@@ -510,5 +513,100 @@ describe("Episode 1 — engine contract fixes", () => {
     expect(inClassroom.currentRoomId).toBe("classroom");
     const result = processCommand(inClassroom, campaign, episode1, "use extinguisher");
     expect(result.output.join(" ")).not.toMatch(/noticeboard/i);
+  });
+});
+
+/** classroom -> park_room, having evaded the caretaker via the closet. */
+function atPark(): GameState {
+  return run(
+    inCorridor1(),
+    "go forward",
+    "go closet",
+    "go forward",
+    "use button",
+    "go forward",
+    "run forward",
+    "go forward",
+  );
+}
+
+describe("Episode 1 — the scarf and the chase home (pacing fix)", () => {
+  it("taking the scarf sets chasedFromPark and narrates something moving in the trees", () => {
+    const result = processCommand(atPark(), campaign, episode1, "take scarf");
+    expect(result.state.flags.chasedFromPark).toBe(true);
+    expect(result.state.inventory).toContain("camilles_scarf");
+    expect(result.output.join(" ")).toMatch(/branch snaps/i);
+  });
+
+  it("leaving the park reads calm if the scarf was never taken", () => {
+    const result = processCommand(atPark(), campaign, episode1, "go home");
+    expect(result.output.join(" ")).toMatch(/falling quiet behind you/i);
+    expect(result.state.currentRoomId).toBe("front_garden");
+  });
+
+  it("leaving the park reads as a chase once the scarf has been taken", () => {
+    const withScarf = run(atPark(), "take scarf");
+    const result = processCommand(withScarf, campaign, episode1, "go home");
+    expect(result.output.join(" ")).toMatch(/chest heaving/i);
+    expect(result.state.currentRoomId).toBe("front_garden");
+  });
+
+  it("the scarf has no authored USE outcome and falls back gracefully", () => {
+    const withScarf = run(atPark(), "take scarf");
+    const result = processCommand(withScarf, campaign, episode1, "use scarf");
+    expect(result.output.join(" ")).toMatch(/it's hers/i);
+  });
+});
+
+/** classroom -> reception, having evaded the caretaker via the closet. */
+function atReception(): GameState {
+  return run(inCorridor1(), "go forward", "go closet", "go forward");
+}
+
+describe("Episode 1 — the front doors (run-only timed exit)", () => {
+  it("the doors are locked before the button is ever pressed, regardless of verb", () => {
+    const state = run(atReception(), "go forward"); // reception -> front_doors
+    const viaGo = processCommand(state, campaign, episode1, "go out");
+    expect(viaGo.output.join(" ")).toMatch(/don't budge/i);
+    const viaRun = processCommand(state, campaign, episode1, "run out");
+    expect(viaRun.output.join(" ")).toMatch(/don't budge/i);
+    expect(viaRun.state.flags.frontDoorsUnlocked).toBe(false);
+  });
+
+  it("USE on the button (a fixture, not an inventory item) unlocks the doors", () => {
+    const result = processCommand(atReception(), campaign, episode1, "use button");
+    expect(result.state.flags.frontDoorsUnlocked).toBe(true);
+    expect(result.output.join(" ")).toMatch(/clunks and releases/i);
+  });
+
+  it("walking (not running) through the unlocked doors fails and relocks them", () => {
+    const unlocked = run(atReception(), "use button", "go forward");
+    const result = processCommand(unlocked, campaign, episode1, "go out");
+    expect(result.output.join(" ")).toMatch(/not fast enough/i);
+    expect(result.state.currentRoomId).toBe("front_doors");
+    expect(result.state.flags.frontDoorsUnlocked).toBe(false);
+  });
+
+  it("a bare exit word (no explicit verb) does not count as running", () => {
+    const unlocked = run(atReception(), "use button", "go forward");
+    const result = processCommand(unlocked, campaign, episode1, "out");
+    expect(result.output.join(" ")).toMatch(/not fast enough/i);
+    expect(result.state.flags.frontDoorsUnlocked).toBe(false);
+  });
+
+  it("running through the unlocked doors in time succeeds", () => {
+    const unlocked = run(atReception(), "use button", "go forward");
+    const result = processCommand(unlocked, campaign, episode1, "run out");
+    expect(result.state.currentRoomId).toBe("high_street_room");
+    expect(result.output.join(" ")).toMatch(/shove through the doors/i);
+  });
+
+  it("can go back to reception and retry after relocking", () => {
+    const relocked = run(atReception(), "use button", "go forward", "go out"); // wrong verb, relocks
+    expect(relocked.currentRoomId).toBe("front_doors");
+    const backAtReception = run(relocked, "go back");
+    expect(backAtReception.currentRoomId).toBe("reception");
+    const retried = run(backAtReception, "use button", "go forward", "run out");
+    expect(retried.currentRoomId).toBe("high_street_room");
   });
 });

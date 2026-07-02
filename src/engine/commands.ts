@@ -11,6 +11,7 @@ export interface CommandResult {
 const HELP_TEXT = [
   "Commands you can use:",
   "  go / n / s / e / w  - move in a direction or towards a named exit",
+  "  run <exit>           - move quickly — some tense moments need this instead of go",
   "  look / l            - describe where you are",
   "  examine / x <thing>  - look closely at something",
   "  inventory / i        - list what you're carrying",
@@ -238,7 +239,11 @@ function isExitPassable(state: GameState, exit: ExitDef): boolean {
 function moveThroughExit(state: GameState, episode: EpisodeDef, exit: ExitDef, extraOutput: string[] = []): CommandResult {
   let next: GameState = { ...state, currentRoomId: exit.targetRoomId };
   const output = [...extraOutput];
-  if (exit.successText) output.push(exit.successText);
+  const text =
+    exit.alternateSuccessText && state.flags[exit.alternateSuccessText.flag]
+      ? exit.alternateSuccessText.text
+      : exit.successText;
+  if (text) output.push(text);
   if (exit.onSuccess) {
     const applied = applyEffects(next, episode, exit.onSuccess);
     next = applied.state;
@@ -247,10 +252,19 @@ function moveThroughExit(state: GameState, episode: EpisodeDef, exit: ExitDef, e
   return { state: next, output: [...output, ...describeRoom(next, episode)] };
 }
 
-function resolveGo(state: GameState, episode: EpisodeDef, target: string): CommandResult {
+function resolveGo(state: GameState, episode: EpisodeDef, target: string, isRunning: boolean): CommandResult {
   const { room } = findRoom(episode, state.currentRoomId);
   const exit = findExit(room, target);
   if (!exit) return { state, output: ["You can't go that way."] };
+
+  const windowOpen = !exit.requiresFlag || state.flags[exit.requiresFlag];
+  if (exit.requiresRun && windowOpen && !isRunning) {
+    // The window was open, but walking wasn't fast enough — it closes now.
+    const next: GameState = exit.requiresFlag
+      ? { ...state, flags: { ...state.flags, [exit.requiresFlag]: false } }
+      : state;
+    return { state: next, output: [exit.wrongRunText ?? "You weren't fast enough."] };
+  }
 
   if (!isExitPassable(state, exit)) {
     return { state, output: [exit.lockedText ?? "That's locked."] };
@@ -317,8 +331,14 @@ function resolveTake(state: GameState, episode: EpisodeDef, target: string): Com
     return { state, output: ["You already have that."] };
   }
   const item = findItem(episode, interactable.itemId);
-  const next: GameState = { ...state, inventory: [...state.inventory, item.id] };
-  return { state: next, output: [item.takeText ?? `You take the ${item.name}.`] };
+  let next: GameState = { ...state, inventory: [...state.inventory, item.id] };
+  const output = [item.takeText ?? `You take the ${item.name}.`];
+  if (interactable.onTakeEffects) {
+    const applied = applyEffects(next, episode, interactable.onTakeEffects);
+    next = applied.state;
+    output.push(...applied.output);
+  }
+  return { state: next, output };
 }
 
 function resolveDrop(state: GameState, episode: EpisodeDef, target: string): CommandResult {
@@ -354,8 +374,18 @@ function resolveClose(state: GameState, episode: EpisodeDef, target: string): Co
 
 function resolveUse(state: GameState, episode: EpisodeDef, targetRaw: string, secondTargetRaw: string | undefined): CommandResult {
   const item = findInInventory(episode, state.inventory, targetRaw);
-  if (!item) return { state, output: [`You don't have "${targetRaw}" to use.`] };
   const { room, scene } = findRoom(episode, state.currentRoomId);
+
+  if (!item) {
+    // Not an inventory item — maybe it's a fixed-in-place fixture (a button, a lever).
+    const fixture = findInteractable(state, room, targetRaw);
+    if (fixture) {
+      if (!fixture.onUseEffects && !fixture.useText) return { state, output: ["Nothing happens."] };
+      const applied = applyEffects(state, episode, fixture.onUseEffects ?? []);
+      return { state: applied.state, output: [fixture.useText ?? "Nothing happens.", ...applied.output] };
+    }
+    return { state, output: [`You don't have "${targetRaw}" to use.`] };
+  }
 
   if (item.tag === "essential") {
     const use = item.essentialUse;
@@ -523,7 +553,7 @@ export function processCommand(
       // shouldn't have to remember to prefix them with "go".
       const { room } = findRoom(episode, state.currentRoomId);
       result = findExit(room, cmd.raw)
-        ? resolveGo(state, episode, cmd.raw)
+        ? resolveGo(state, episode, cmd.raw, false)
         : { state, output: [`I don't understand "${cmd.raw}". Type HELP for the list of commands.`] };
       break;
     }
@@ -554,7 +584,7 @@ export function processCommand(
       result = resolveTalk(state, campaign, episode, cmd.target);
       break;
     case "go":
-      result = resolveGo(state, episode, cmd.target);
+      result = resolveGo(state, episode, cmd.target, cmd.running);
       break;
     case "examine":
       result = resolveExamine(state, episode, cmd.target);
